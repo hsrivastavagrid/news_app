@@ -221,6 +221,25 @@ def agent_filter(body: AgentFilterRequest):
     return result
 
 
+@app.post("/api/synthesize")
+def trigger_synthesize(records_per_tag: int = Query(100, ge=1, le=200)):
+    """Rebuild the combinatorial synthetic dataset (~records_per_tag per domain tag)."""
+    from app.services.synthesizer import synthesize_and_process_dataset
+
+    logger.info("activity synthesize begin records_per_tag=%s", records_per_tag)
+    try:
+        count = synthesize_and_process_dataset(records_per_tag)
+    except Exception:
+        logger.exception("synthesize failed")
+        raise
+    logger.info("activity synthesize done articles=%s", count)
+    return {
+        "status": "success",
+        "message": f"Synthesized dataset processed. Stored {count} articles.",
+        "new_articles_count": count,
+    }
+
+
 @app.post("/api/fetch-now")
 def trigger_fetch_now():
     logger.info("activity fetch-now begin")

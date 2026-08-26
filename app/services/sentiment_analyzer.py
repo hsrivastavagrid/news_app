@@ -9,6 +9,7 @@ from app.config import (
     VADER_UGLY_COMPOUND_WITH_KW,
     VADER_UGLY_COMPOUND_NO_KW,
     DOMAIN_TAGS,
+    CONTAGION_NEIGHBORS,
 )
 from app.models import SentimentResult
 from app.database import db
@@ -95,37 +96,35 @@ def detect_cross_domain_contagion():
                 tag_current[tag] = rows[0]["avg_compound"]
                 tag_deltas[tag] = 0.0
 
-        # Check pairs for contagion signal
+        # One alert per collapsing source → related lagging neighbors only.
         for tag_a in DOMAIN_TAGS:
-            for tag_b in DOMAIN_TAGS:
-                if tag_a == tag_b:
-                    continue
-                
-                delta_a = tag_deltas.get(tag_a, 0.0)
-                curr_b = tag_current.get(tag_b, 0.0)
-                delta_b = tag_deltas.get(tag_b, 0.0)
-
-                # Signal: Tag A collapsed (delta <= -0.3) while Tag B is lagging (delta_b >= -0.1)
-                if delta_a <= -0.3 and delta_b >= -0.1:
-                    msg = (
-                        f"Cross-Domain Contagion Alert: {tag_a.title()} sentiment dropped sharply "
-                        f"(Delta {round(delta_a, 2)}). Historical ripple effect predicts {tag_b.title()} "
-                        f"may shift negative within 2-4 hours."
-                    )
-                    logger.info(
-                        "contagion alert %s -> %s severity=%s",
-                        tag_a,
-                        tag_b,
-                        "high" if delta_a <= -0.5 else "moderate",
-                    )
-                    db.insert_contagion_event(
-                        source_tag=tag_a,
-                        target_tag=tag_b,
-                        severity="high" if delta_a <= -0.5 else "moderate",
-                        source_delta=round(delta_a, 3),
-                        target_current=round(curr_b, 3),
-                        message=msg,
-                    )
+            delta_a = tag_deltas.get(tag_a, 0.0)
+            if delta_a > -0.3:
+                continue
+            lagging = [
+                tag_b
+                for tag_b in CONTAGION_NEIGHBORS.get(tag_a, ())
+                if tag_deltas.get(tag_b, 0.0) >= -0.1
+            ]
+            if not lagging:
+                continue
+            targets = ", ".join(t.title() for t in lagging)
+            msg = (
+                f"Cross-Domain Contagion Alert: {tag_a.title()} sentiment dropped sharply "
+                f"(Delta {round(delta_a, 2)}). Historical ripple effect predicts {targets} "
+                f"may shift negative within 2-4 hours."
+            )
+            primary = lagging[0]
+            severity = "high" if delta_a <= -0.5 else "moderate"
+            logger.info("contagion alert %s -> %s severity=%s", tag_a, lagging, severity)
+            db.insert_contagion_event(
+                source_tag=tag_a,
+                target_tag=primary,
+                severity=severity,
+                source_delta=round(delta_a, 3),
+                target_current=round(tag_current.get(primary, 0.0), 3),
+                message=msg,
+            )
     except Exception:
         logger.exception("contagion detection failed")
     finally:

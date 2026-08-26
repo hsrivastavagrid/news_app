@@ -218,7 +218,7 @@ export default function App() {
 
         {error ? <div className="banner err" data-testid="error-banner">{error}</div> : null}
         {alerts.map((a) => (
-          <div key={a.id} className="banner warn">
+          <div key={a.source_tag || a.id} className="banner warn">
             {a.message}
           </div>
         ))}
