@@ -72,42 +72,43 @@ NEWSAPI_CATEGORY_MAP = {
     "health": "health",
 }
 
-def fetch_from_newsapi(category: str) -> List[RawArticle]:
-    """Fetches top headlines from NewsAPI.org for the most recent complete hour window.
+def fetch_from_newsapi(category: Optional[str] = None) -> List[RawArticle]:
+    """Fetches top headlines from NewsAPI.org for a rolling 1-hour window (now - 1 hour -> now).
     
-    If now = 14:55 UTC, fetches from 13:00 UTC to 14:00 UTC.
+    Makes a single API call for up to 100 top headlines to minimize requests and prevent 429 rate limiting.
     """
     if not NEWSAPI_KEY:
         return []
 
-    # Compute floor-hour window: previous complete hour based on floor(now)
+    # Compute rolling 1-hour window: (now - 1h) -> now
     now_utc = datetime.datetime.now(datetime.timezone.utc)
-    floor_hour = now_utc.replace(minute=0, second=0, microsecond=0)
-    window_start = floor_hour - datetime.timedelta(hours=1)
-    window_start_iso = window_start.isoformat()
+    start_utc = now_utc - datetime.timedelta(hours=1)
+    start_iso = start_utc.isoformat()
 
     params = {
-        "category": category,
         "language": "en",
-        "pageSize": 20,
+        "pageSize": 100,
         "apiKey": NEWSAPI_KEY,
-        "from": window_start_iso,
+        "from": start_iso,
     }
+    if category:
+        params["category"] = category
+
     try:
         with httpx.Client(timeout=15.0) as client:
             resp = client.get(NEWSAPI_BASE_URL, params=params)
             if resp.status_code == 426:
-                print(f"[NewsAPI] 426 Upgrade Required for category {category} — free tier may be limited to localhost")
+                print(f"[NewsAPI] 426 Upgrade Required — free tier may be limited to localhost")
                 return []
             if resp.status_code == 429:
-                print(f"[NewsAPI] Rate limited (429) for category {category}")
+                print(f"[NewsAPI] Rate limited (429). Will not retry until next scheduled interval.")
                 return []
             if resp.status_code != 200:
-                print(f"[NewsAPI] Error {resp.status_code} for category {category}: {resp.text[:200]}")
+                print(f"[NewsAPI] Error {resp.status_code}: {resp.text[:200]}")
                 return []
             data = resp.json()
             if data.get("status") != "ok":
-                print(f"[NewsAPI] Non-OK status for category {category}: {data.get('message', '')}")
+                print(f"[NewsAPI] Non-OK status: {data.get('message', '')}")
                 return []
 
             articles = []
@@ -117,22 +118,25 @@ def fetch_from_newsapi(category: str) -> List[RawArticle]:
                 # NewsAPI sometimes returns "[Removed]" placeholder articles
                 if not art_url or title == "[Removed]":
                     continue
+                
+                # Standardize publishedAt timestamp
+                pub_raw = item.get("publishedAt") or now_utc.isoformat()
                 articles.append(
                     RawArticle(
                         title=title,
                         description=item.get("description"),
                         url=art_url,
                         source_name=(item.get("source") or {}).get("name"),
-                        api_category=NEWSAPI_CATEGORY_MAP.get(category, category),
+                        api_category=NEWSAPI_CATEGORY_MAP.get(category, category) if category else "general",
                         image_url=item.get("urlToImage"),
-                        published_at=item.get("publishedAt") or datetime.datetime.now(datetime.timezone.utc).isoformat(),
+                        published_at=pub_raw,
                         url_hash=compute_url_hash(art_url),
                     )
                 )
-            print(f"[NewsAPI] Fetched {len(articles)} articles for category '{category}' (last hour)")
+            print(f"[NewsAPI] Successfully fetched {len(articles)} articles (rolling 1-hour window)")
             return articles
     except Exception as e:
-        print(f"[NewsAPI] Fetch exception for category {category}: {e}")
+        print(f"[NewsAPI] Fetch exception: {e}")
         return []
 
 def fetch_from_currents(category: str) -> List[RawArticle]:
@@ -169,17 +173,15 @@ def fetch_from_currents(category: str) -> List[RawArticle]:
         print(f"[Currents] Fetch exception: {e}")
         return []
 
-def generate_mock_articles(category: str) -> List[RawArticle]:
+def generate_mock_articles(category: str = "general") -> List[RawArticle]:
     """Generates dynamic realistic articles when API keys are not provided or rate-limited.
     
-    Uses a timestamp within the most recent complete floor-hour window so mock
-    articles appear correctly in floor-hour filtered queries.
+    Uses timestamps within the rolling 1-hour window (now - 30 min) so mock articles appear
+    correctly in rolling 1-hour filtered queries.
     """
     now_utc = datetime.datetime.now(datetime.timezone.utc)
-    floor_hour = now_utc.replace(minute=0, second=0, microsecond=0)
-    # Place mock articles 30 minutes into the previous complete hour window
-    mock_time = floor_hour - datetime.timedelta(minutes=30)
-    mock_iso = mock_time.isoformat()
+    mock_time = now_utc - datetime.timedelta(minutes=30)
+    mock_iso = mock_time.strftime("%Y-%m-%d %H:%M:%S")
     unique_ns = time.time_ns()
 
     samples = {
@@ -249,7 +251,7 @@ def process_raw_articles(
         # 1. Analyze sentiment via sentiment_analyzer.py
         sentiment = analyze_text(raw.title, raw.description)
 
-        # 2. Assign domain tags
+        # 2. Assign domain tags locally via keyword matching
         tags = assign_tags(raw.api_category, raw.title, raw.description)
 
         # 3. Store in DB
@@ -268,17 +270,17 @@ def process_raw_articles(
 def fetch_and_process_news() -> int:
     """
     Main job pipeline:
-    1. Fetches raw news for categories from NewsAPI.org -> Currents -> Mock fallback
-    2. Passes raw articles into process_raw_articles pipeline
+    1. Makes 1 single request to NewsAPI for a broad pool of top headlines (minimizes API calls & prevents 429).
+    2. Falls back to Currents or mock data if NewsAPI is unavailable or rate-limited.
+    3. Passes raw articles into process_raw_articles pipeline for local tag classification & sentiment analysis.
     """
-    all_raw: List[RawArticle] = []
+    # Make 1 single request to NewsAPI for up to 100 headlines
+    raw_articles = fetch_from_newsapi()
 
-    for category in NEWSAPI_CATEGORIES:
-        raw_articles = fetch_from_newsapi(category)
-        if not raw_articles:
-            raw_articles = fetch_from_currents(category)
-        if not raw_articles:
-            raw_articles = generate_mock_articles(category)
-        all_raw.extend(raw_articles)
+    # Fallback if empty (e.g. rate limited or no API key)
+    if not raw_articles:
+        raw_articles = fetch_from_currents("general")
+    if not raw_articles:
+        raw_articles = generate_mock_articles("general")
 
-    return process_raw_articles(all_raw)
+    return process_raw_articles(raw_articles)
