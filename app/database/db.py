@@ -45,18 +45,28 @@ def init_db():
     finally:
         conn.close()
 
-def insert_article(raw: RawArticle, sentiment: SentimentResult, tags: List[str]) -> Optional[int]:
+def insert_article(
+    raw: RawArticle,
+    sentiment: SentimentResult,
+    tags: List[str],
+    fetched_at: Optional[str] = None,
+) -> Optional[int]:
     """Insert article and its multi-tags into sqlite db with SHA256 url deduplication."""
     conn = get_db_connection()
     cursor = conn.cursor()
+    
+    # Default fetched_at to current UTC string if not provided
+    if not fetched_at:
+        fetched_at = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+
     try:
         cursor.execute(
             """
             INSERT INTO articles (
                 url_hash, title, description, source_name, api_category,
-                url, image_url, published_at, compound_score, positive_score,
+                url, image_url, published_at, fetched_at, compound_score, positive_score,
                 negative_score, neutral_score, sentiment_label, ugly_keyword_count
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(url_hash) DO NOTHING;
             """,
             (
@@ -68,6 +78,7 @@ def insert_article(raw: RawArticle, sentiment: SentimentResult, tags: List[str])
                 raw.url,
                 raw.image_url,
                 raw.published_at,
+                fetched_at,
                 sentiment.compound,
                 sentiment.positive,
                 sentiment.negative,
