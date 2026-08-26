@@ -361,8 +361,19 @@ if alerts:
     for alert in alerts:
         st.markdown(f'<div class="alert-banner">{alert.message}</div>', unsafe_allow_html=True)
 
-# Broader View (Overall Mood calculated hourly)
-overall_dashboard = db.get_dashboard_mode(tags=None, hours=1)
+# Compute the most recent COMPLETE floor-hour window (UTC)
+# e.g. now=14:55 UTC → win_from='13:00', win_to='14:00'
+win_from, win_to = db.get_floor_hour_window()
+
+# For display in UI: convert window bounds to IST (GMT+5:30)
+_ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+_utc = datetime.timezone.utc
+_wf = datetime.datetime.strptime(win_from, "%Y-%m-%d %H:%M:%S").replace(tzinfo=_utc).astimezone(_ist)
+_wt = datetime.datetime.strptime(win_to, "%Y-%m-%d %H:%M:%S").replace(tzinfo=_utc).astimezone(_ist)
+win_display = f"{_wf.strftime('%I:%M %p')} – {_wt.strftime('%I:%M %p')} (GMT +5:30)"
+
+# Broader View (Overall Mood for floor-hour window)
+overall_dashboard = db.get_dashboard_mode(tags=None, time_from=win_from, time_to=win_to)
 
 mode_colors = {
     "good": "#10B981",
@@ -375,19 +386,19 @@ overall_mode_str = overall_dashboard.dominant_mode.upper()
 overall_color = mode_colors.get(overall_dashboard.dominant_mode, "#9CA3AF")
 
 st.markdown('<div class="hero-box">', unsafe_allow_html=True)
-st.markdown('<div style="font-size: 12px; font-weight: bold; letter-spacing: 1.5px; color: #818CF8;">BROADER VIEW (LAST HOUR OVERALL MOOD)</div>', unsafe_allow_html=True)
+st.markdown(f'<div style="font-size: 12px; font-weight: bold; letter-spacing: 1.5px; color: #818CF8;">BROADER VIEW &nbsp;|&nbsp; {win_display}</div>', unsafe_allow_html=True)
 
 col_hero1, col_hero2, col_hero3, col_hero4 = st.columns([2, 1, 1, 1])
 
 with col_hero1:
     st.markdown(f'<div style="font-size: 32px; font-weight: bold; color: {overall_color};">{overall_mode_str}</div>', unsafe_allow_html=True)
-    st.markdown('<div style="font-size: 14px; color: #94A3B8;">Global news sentiment calculated for the last hour</div>', unsafe_allow_html=True)
+    st.markdown('<div style="font-size: 14px; color: #94A3B8;">Global news sentiment for the above window</div>', unsafe_allow_html=True)
 
 with col_hero2:
     st.metric("Compound Score", f"{overall_dashboard.avg_compound:+.2f}")
 
 with col_hero3:
-    st.metric("Last Hour News", overall_dashboard.total_articles)
+    st.metric("News Articles", overall_dashboard.total_articles)
 
 with col_hero4:
     ugly_pct = round((overall_dashboard.ugly_count / max(overall_dashboard.total_articles, 1)) * 100)
@@ -398,8 +409,8 @@ st.markdown('</div>', unsafe_allow_html=True)
 # Domain Tags Section & Per-Tag Badges (Calculated Hourly)
 st.markdown('<div style="font-size: 20px; font-weight: bold; margin-bottom: 12px;">DOMAIN TAGS (HOURLY MODES)</div>', unsafe_allow_html=True)
 
-# Fetch current tag metadata & per-tag modes for the last hour
-tags_metadata = db.get_all_tags_with_metadata(hours=1)
+# Fetch current tag metadata & per-tag modes for the floor-hour window
+tags_metadata = db.get_all_tags_with_metadata(time_from=win_from, time_to=win_to)
 
 # Display Per-Tag Mode Badges in Columns
 tag_cols = st.columns(len(DOMAIN_TAGS))
@@ -427,8 +438,8 @@ selected_tags = st.multiselect(
     format_func=lambda x: TAG_METADATA.get(x, {}).get("label", x.title()),
 )
 
-# Fetch Dynamic Dashboard Mode based on Selected Tags (Hourly calculation)
-selected_dashboard = db.get_dashboard_mode(tags=selected_tags, hours=1)
+# Fetch Dynamic Dashboard Mode based on Selected Tags (floor-hour window)
+selected_dashboard = db.get_dashboard_mode(tags=selected_tags, time_from=win_from, time_to=win_to)
 
 st.markdown("---")
 
@@ -572,7 +583,7 @@ with col_f1:
     )
 
 sent_param = sentiment_filter.lower() if sentiment_filter != "All" else None
-articles = db.get_articles(tags=selected_tags, sentiment=sent_param, hours=1, limit=50)
+articles = db.get_articles(tags=selected_tags, sentiment=sent_param, time_from=win_from, time_to=win_to, limit=50)
 
 st.markdown(f'<div style="font-size: 14px; color: #94A3B8; margin-bottom: 16px;">Showing {len(articles)} articles</div>', unsafe_allow_html=True)
 

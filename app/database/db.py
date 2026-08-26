@@ -12,6 +12,21 @@ from app.models import (
     ContagionEventSchema,
 )
 
+def get_floor_hour_window() -> Tuple[str, str]:
+    """
+    Returns (window_start, window_end) ISO strings for the most recent COMPLETE hour.
+    Example: if now = 14:55 UTC → window_start = '14:00:00', window_end = '15:00:00' (i.e., 13:00-14:00)
+    Wait — the user wants: app launched at 2:55 PM → show 1:00 PM to 2:00 PM.
+    So: floor_hour = 14:00, window = 13:00 → 14:00 (floor_hour - 1h → floor_hour).
+    """
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
+    floor_hour = now_utc.replace(minute=0, second=0, microsecond=0)
+    window_start = floor_hour - datetime.timedelta(hours=1)
+    return (
+        window_start.strftime("%Y-%m-%d %H:%M:%S"),
+        floor_hour.strftime("%Y-%m-%d %H:%M:%S"),
+    )
+
 def get_db_connection() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
     conn.row_factory = sqlite3.Row
@@ -87,19 +102,31 @@ def insert_article(raw: RawArticle, sentiment: SentimentResult, tags: List[str])
     finally:
         conn.close()
 
-def get_all_tags_with_metadata(hours: Optional[int] = None) -> List[TagInfoSchema]:
-    """Returns each domain tag with its article count and current dominant sentiment mode for the given hour window."""
+def get_all_tags_with_metadata(
+    time_from: Optional[str] = None,
+    time_to: Optional[str] = None,
+) -> List[TagInfoSchema]:
+    """
+    Returns each domain tag with its article count and dominant sentiment mode.
+    time_from / time_to are ISO datetime strings (UTC). If both provided, filters
+    articles to that exact window (e.g., floor-hour window: 13:00 -> 14:00).
+    """
     conn = get_db_connection()
     cursor = conn.cursor()
     results = []
-    
-    time_filter = f"WHERE at.tag = ? AND a.fetched_at >= datetime('now', '-{hours} hours')" if hours else "WHERE at.tag = ?"
-    
+
+    if time_from and time_to:
+        time_filter = "WHERE at.tag = ? AND a.fetched_at >= ? AND a.fetched_at < ?"
+        time_params_extra = [time_from, time_to]
+    else:
+        time_filter = "WHERE at.tag = ?"
+        time_params_extra = []
+
     try:
         for tag_name in DOMAIN_TAGS:
             cursor.execute(
                 f"""
-                SELECT 
+                SELECT
                     a.sentiment_label,
                     COUNT(*) as count
                 FROM articles a
@@ -107,7 +134,7 @@ def get_all_tags_with_metadata(hours: Optional[int] = None) -> List[TagInfoSchem
                 {time_filter}
                 GROUP BY a.sentiment_label
                 """,
-                (tag_name,),
+                [tag_name] + time_params_extra,
             )
             rows = cursor.fetchall()
             counts = {"good": 0, "bad": 0, "ugly": 0, "neutral": 0}
@@ -115,12 +142,11 @@ def get_all_tags_with_metadata(hours: Optional[int] = None) -> List[TagInfoSchem
             for r in rows:
                 counts[r["sentiment_label"]] = r["count"]
                 total += r["count"]
-            
-            # Determine dominant mode dynamically
+
             dominant_mode = "neutral"
             if total > 0:
                 dominant_mode = max(counts, key=counts.get)
-            
+
             meta = TAG_METADATA.get(tag_name, {"label": tag_name.title(), "icon": "", "color": "#6B7280"})
             results.append(
                 TagInfoSchema(
@@ -151,14 +177,25 @@ def build_intersection_query(tags: Optional[List[str]]) -> Tuple[str, List[Any]]
     query_from = f"FROM articles a {' '.join(joins)}"
     return query_from, params
 
-def get_dashboard_mode(tags: Optional[List[str]] = None, hours: Optional[int] = None) -> DashboardModeSchema:
-    """Calculates overall sentiment mode dynamically for selected tags intersection within the specified hour window."""
+def get_dashboard_mode(
+    tags: Optional[List[str]] = None,
+    time_from: Optional[str] = None,
+    time_to: Optional[str] = None,
+) -> DashboardModeSchema:
+    """
+    Calculates overall sentiment mode for selected tag intersection within a time window.
+    time_from / time_to are ISO datetime strings (UTC). Filters articles fetched_at >= time_from and < time_to.
+    """
     conn = get_db_connection()
     cursor = conn.cursor()
     tags_clean = [t.strip().lower() for t in tags if t.strip()] if tags else []
-    
+
     from_clause, params = build_intersection_query(tags_clean)
-    where_clause = f"WHERE a.fetched_at >= datetime('now', '-{hours} hours')" if hours else ""
+    if time_from and time_to:
+        where_clause = "WHERE a.fetched_at >= ? AND a.fetched_at < ?"
+        params = params + [time_from, time_to]
+    else:
+        where_clause = ""
     
     sql = f"""
         SELECT 
@@ -244,23 +281,28 @@ def get_trends(tags: Optional[List[str]] = None, hours: int = 24) -> List[TrendP
 def get_articles(
     tags: Optional[List[str]] = None,
     sentiment: Optional[str] = None,
-    hours: Optional[int] = None,
+    time_from: Optional[str] = None,
+    time_to: Optional[str] = None,
     limit: int = 50
 ) -> List[ArticleSchema]:
-    """Fetches articles matching multi-tag intersection, optional sentiment filter, and optional hour window."""
+    """
+    Fetches articles matching multi-tag intersection, optional sentiment filter, and floor-hour time window.
+    time_from / time_to are ISO datetime strings (UTC) bounding the window (e.g., '2026-08-26 13:00:00' → '2026-08-26 14:00:00').
+    """
     conn = get_db_connection()
     cursor = conn.cursor()
     tags_clean = [t.strip().lower() for t in tags if t.strip()] if tags else []
-    
+
     from_clause, params = build_intersection_query(tags_clean)
-    
+
     where_clauses = []
-    if hours:
-        where_clauses.append(f"a.fetched_at >= datetime('now', '-{hours} hours')")
+    if time_from and time_to:
+        where_clauses.append("a.fetched_at >= ? AND a.fetched_at < ?")
+        params = params + [time_from, time_to]
     if sentiment:
         where_clauses.append("a.sentiment_label = ?")
         params.append(sentiment.lower())
-    
+
     where_str = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
     
     sql = f"""

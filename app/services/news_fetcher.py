@@ -73,19 +73,25 @@ NEWSAPI_CATEGORY_MAP = {
 }
 
 def fetch_from_newsapi(category: str) -> List[RawArticle]:
-    """Fetches top headlines from NewsAPI.org for the last hour only."""
+    """Fetches top headlines from NewsAPI.org for the most recent complete hour window.
+    
+    If now = 14:55 UTC, fetches from 13:00 UTC to 14:00 UTC.
+    """
     if not NEWSAPI_KEY:
         return []
 
-    # Calculate ISO string for 1 hour ago
-    one_hour_ago = (datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=1)).isoformat()
+    # Compute floor-hour window: previous complete hour based on floor(now)
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
+    floor_hour = now_utc.replace(minute=0, second=0, microsecond=0)
+    window_start = floor_hour - datetime.timedelta(hours=1)
+    window_start_iso = window_start.isoformat()
 
     params = {
         "category": category,
         "language": "en",
         "pageSize": 20,
         "apiKey": NEWSAPI_KEY,
-        "from": one_hour_ago,
+        "from": window_start_iso,
     }
     try:
         with httpx.Client(timeout=15.0) as client:
@@ -164,9 +170,16 @@ def fetch_from_currents(category: str) -> List[RawArticle]:
         return []
 
 def generate_mock_articles(category: str) -> List[RawArticle]:
-    """Generates dynamic realistic articles when API keys are not provided or rate-limited."""
-    now_dt = datetime.datetime.now(datetime.timezone.utc)
-    now_iso = now_dt.isoformat()
+    """Generates dynamic realistic articles when API keys are not provided or rate-limited.
+    
+    Uses a timestamp within the most recent complete floor-hour window so mock
+    articles appear correctly in floor-hour filtered queries.
+    """
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
+    floor_hour = now_utc.replace(minute=0, second=0, microsecond=0)
+    # Place mock articles 30 minutes into the previous complete hour window
+    mock_time = floor_hour - datetime.timedelta(minutes=30)
+    mock_iso = mock_time.isoformat()
     unique_ns = time.time_ns()
 
     samples = {
@@ -213,7 +226,7 @@ def generate_mock_articles(category: str) -> List[RawArticle]:
                 source_name="NewsPulse Global Service",
                 api_category=category,
                 image_url=None,
-                published_at=now_iso,
+                published_at=mock_iso,
                 url_hash=compute_url_hash(timestamped_url),
             )
         )
