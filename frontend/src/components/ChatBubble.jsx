@@ -169,13 +169,15 @@ export default function ChatBubble({ filters }) {
           <div ref={endRef} />
         </div>
 
-        <div className="chat-starters">
-          {STARTERS.map((s) => (
-            <button key={s} type="button" className="starter" disabled={thinking} onClick={() => send(s)}>
-              {s}
-            </button>
-          ))}
-        </div>
+        {!messages.some((m) => m.role === "user") ? (
+          <div className="chat-starters">
+            {STARTERS.map((s) => (
+              <button key={s} type="button" className="starter" disabled={thinking} onClick={() => send(s)}>
+                {s}
+              </button>
+            ))}
+          </div>
+        ) : null}
 
         <form
           className="chat-composer"
