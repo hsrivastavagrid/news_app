@@ -1,6 +1,6 @@
 /** Stats row adapted from Tejeswar001/news-dash dashboard KPI cards. */
 
-export default function StatsBar({ dashboard, articleCount, sourceCount, windowLabel }) {
+export default function StatsBar({ dashboard, articleCount, sourceCount, windowLabel, tape }) {
   const d = dashboard || {};
   const total = d.total_articles || 0;
   const uglyPct = total ? Math.round((d.ugly_count / total) * 100) : 0;
@@ -28,6 +28,14 @@ export default function StatsBar({ dashboard, articleCount, sourceCount, windowL
       <div className="stat">
         <span className="stat-kicker">Ugly index</span>
         <strong>{uglyPct}%</strong>
+      </div>
+      <div className="stat">
+        <span className="stat-kicker">Names on tape</span>
+        <strong data-testid="stat-tape">{tape?.name_count ?? 0}</strong>
+      </div>
+      <div className="stat">
+        <span className="stat-kicker">Risk-off names</span>
+        <strong className="mood bad">{tape?.risk_off_count ?? 0}</strong>
       </div>
     </section>
   );

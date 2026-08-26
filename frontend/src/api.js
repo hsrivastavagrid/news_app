@@ -47,6 +47,7 @@ export const api = {
   tags: () => request("/api/tags"),
   dashboard: (filters) => request(`/api/dashboard?${buildQuery(filters)}`),
   articles: (filters) => request(`/api/articles?${buildQuery(filters)}`),
+  tape: (filters) => request(`/api/tape?${buildQuery({ ...filters, limit: 200 })}`),
   contagion: () => request("/api/contagion"),
   preferences: () => request("/api/preferences"),
   savePreferences: (body) =>

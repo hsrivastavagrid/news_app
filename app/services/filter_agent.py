@@ -18,7 +18,7 @@ Valid sentiments (use only these): good, bad, ugly, neutral
 Rules:
 - tags: domains the user wants. Empty means all domains.
 - sentiments: modes to KEEP. If they say "no ugly" omit ugly. If they say "only good" return ["good"].
-- keywords: extra phrases to match in title/description. Empty means no keyword constraint.
+- keywords: extra phrases to match in title/description (tickers like NVDA, Fed, earnings). Empty means no keyword constraint.
 - tag_mode: "union" (any selected tag — default for personalization) unless they explicitly want stories that match ALL tags ("intersection").
 - explanation: one short sentence describing the filter.
 
@@ -53,7 +53,7 @@ def heuristic_parse(message: str) -> AgentFilterResponse:
     tags = [t for t in DOMAIN_TAGS if re.search(r"\b" + re.escape(t) + r"\b", text)]
     if "technology" in text and "tech" not in tags:
         tags.append("tech")
-    if "business" in text or "market" in text:
+    if "business" in text or "market" in text or "stock" in text or "trader" in text or "earnings" in text:
         if "finance" not in tags:
             tags.append("finance")
 

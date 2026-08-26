@@ -24,6 +24,12 @@ class SentimentResult:
 
 # Pydantic Schemas for API responses
 
+class CompanyMention(BaseModel):
+    ticker: str
+    name: str
+    sector: str
+
+
 class ArticleSchema(BaseModel):
     id: int
     url_hash: str
@@ -41,6 +47,32 @@ class ArticleSchema(BaseModel):
     neutral_score: float
     sentiment_label: str
     tags: List[str] = []
+    companies: List[CompanyMention] = []
+    event_type: str = "general"
+    event_label: str = "General"
+    signal: str = "watch"
+    thesis: str = ""
+
+
+class TapeNameSchema(BaseModel):
+    ticker: str
+    name: str
+    sector: str
+    signal: str
+    event_types: List[str] = []
+    article_count: int = 0
+    avg_compound: float = 0.0
+    headlines: List[str] = []
+    thesis: str = ""
+
+
+class TapeSchema(BaseModel):
+    names: List[TapeNameSchema] = []
+    risk_off_count: int = 0
+    risk_on_count: int = 0
+    watch_count: int = 0
+    name_count: int = 0
+    disclaimer: str = ""
 
 class TagInfoSchema(BaseModel):
     tag: str

@@ -3,9 +3,9 @@ import { api } from "../api.js";
 import { log } from "../logger.js";
 
 const STARTERS = [
-  "What is the desk mood this hour?",
-  "Which stories are ugly, with citations?",
-  "Summarize tech coverage from the feed.",
+  "Which names are risk-off this hour, with citations?",
+  "What is hitting NVIDIA, Apple, or the Fed?",
+  "Summarize earnings, rates, and M&A on the tape.",
 ];
 
 function renderAnswer(text) {
@@ -32,7 +32,7 @@ export default function ChatBubble({ filters }) {
     {
       role: "assistant",
       content:
-        "Wire desk here. I only answer from this hour’s dashboard and fetched articles, with mandatory citations.",
+        "Markets desk here. I cite this hour’s tape — issuers, events, and headline risk — not buy/sell advice.",
       citations: [],
     },
   ]);

@@ -9,15 +9,16 @@ from app.urls import source_article_url
 
 logger = logging.getLogger("newspulse.chat")
 
-CHAT_SYSTEM = """You are the NewsPulse wire correspondent. You sit on the same desk as the dashboard.
+CHAT_SYSTEM = """You are the NewsPulse markets-desk correspondent. You sit on the same tape as the dashboard.
 
 RULES:
-1. Answer ONLY using the DESK SNAPSHOT and numbered ARTICLES below.
+1. Answer ONLY using the DESK SNAPSHOT, TRADER TAPE, and numbered ARTICLES below.
 2. Every factual sentence MUST include at least one citation like [1] or [3] matching those article numbers.
-3. Never invent headlines, numbers, or URLs. If the desk does not contain the answer, say so and cite the closest articles.
-4. You MAY use dashboard stats (mood, counts, window, contagion) and must still cite supporting articles when you mention specific stories.
-5. Do not truncate: write complete sentences. Prefer 2–6 short paragraphs.
-6. Return JSON only:
+3. Never invent headlines, tickers, prices, numbers, or URLs. If the desk does not contain the answer, say so and cite the closest articles.
+4. You MAY use dashboard stats and the tape (issuers, event types, risk-on/off). Still cite supporting articles when you mention a name.
+5. Frame signals as headline risk a trader would watch (size, hedge, gap risk) — NEVER as personalized buy/sell advice or a price target.
+6. Do not truncate: write complete sentences. Prefer 2–6 short paragraphs.
+7. Return JSON only:
 {"answer":"markdown text with [n] citations","citation_ids":[1,3]}
 citation_ids must be integers that appear in the answer.
 """
@@ -27,6 +28,7 @@ def _build_corpus(articles) -> List[Dict[str, Any]]:
     corpus = []
     for idx, art in enumerate(articles, start=1):
         url = source_article_url(art.url) or ""
+        companies = [f"{c.ticker}:{c.name}" for c in (getattr(art, "companies", None) or [])]
         corpus.append(
             {
                 "id": idx,
@@ -37,6 +39,11 @@ def _build_corpus(articles) -> List[Dict[str, Any]]:
                 "tags": art.tags or [],
                 "description": (art.description or "")[:500],
                 "compound_score": art.compound_score,
+                "tickers": [c.ticker for c in (getattr(art, "companies", None) or [])],
+                "companies": companies,
+                "event_type": getattr(art, "event_type", "general") or "general",
+                "signal": getattr(art, "signal", "watch") or "watch",
+                "thesis": getattr(art, "thesis", "") or "",
             }
         )
     return corpus
@@ -68,19 +75,38 @@ def _desk_snapshot(dashboard, tags_meta, alerts) -> str:
     return "\n".join(lines) or "DASHBOARD: empty"
 
 
+def _tape_snapshot(tape) -> str:
+    if not tape or not getattr(tape, "names", None):
+        return "TAPE: no named issuers this hour."
+    bits = [
+        f"{n.ticker}:{n.signal}:{n.article_count}x:{','.join(n.event_types)}"
+        for n in tape.names[:12]
+    ]
+    return (
+        f"TAPE: names={tape.name_count} risk_off={tape.risk_off_count} "
+        f"risk_on={tape.risk_on_count} watch={tape.watch_count} | "
+        + "; ".join(bits)
+    )
+
+
 def _articles_block(corpus: List[Dict[str, Any]]) -> str:
     rows = []
     for item in corpus:
         rows.append(
-            "[{id}] {title} | source={source} | sentiment={sent} | tags={tags} | url={url}\n"
-            "    {desc}".format(
+            "[{id}] {title} | source={source} | sentiment={sent} | tags={tags} "
+            "| tickers={tickers} | event={event} | signal={signal} | url={url}\n"
+            "    {desc}\n    {thesis}".format(
                 id=item["id"],
                 title=item["title"],
                 source=item["source_name"],
                 sent=item["sentiment_label"],
                 tags=",".join(item["tags"]),
+                tickers=",".join(item.get("tickers") or []) or "-",
+                event=item.get("event_type") or "general",
+                signal=item.get("signal") or "watch",
                 url=item["url"] or "(no publisher url)",
                 desc=item["description"] or "",
+                thesis=item.get("thesis") or "",
             )
         )
     return "\n".join(rows) if rows else "No articles on the desk this hour."
@@ -101,7 +127,11 @@ def _keyword_fallback(question: str, corpus: List[Dict[str, Any]]) -> Tuple[str,
     }]
     scored = []
     for item in corpus:
-        blob = f"{item['title']} {item['description']} {' '.join(item['tags'])}".lower()
+        blob = (
+            f"{item['title']} {item['description']} {' '.join(item['tags'])} "
+            f"{' '.join(item.get('tickers') or [])} {' '.join(item.get('companies') or [])} "
+            f"{item.get('event_type') or ''} {item.get('signal') or ''}"
+        ).lower()
         hits = sum(1 for t in tokens if t in blob)
         scored.append((hits, item))
     scored.sort(key=lambda x: (-x[0], x[1]["id"]))
@@ -179,18 +209,23 @@ def answer_desk_question(
         keywords=keywords,
     )
     dashboard = dashboard.model_copy(update={"window_from": win_from, "window_to": win_to})
-    articles = db.get_articles(
-        tags=tags,
-        sentiments=sentiments,
-        keywords=keywords,
-        tag_mode=tag_mode or "union",
-        time_from=win_from,
-        time_to=win_to,
-        limit=40,
+    from app.services.market_desk import build_tape, decorate_articles
+
+    articles = decorate_articles(
+        db.get_articles(
+            tags=tags,
+            sentiments=sentiments,
+            keywords=keywords,
+            tag_mode=tag_mode or "union",
+            time_from=win_from,
+            time_to=win_to,
+            limit=40,
+        )
     )
     tags_meta = db.get_all_tags_with_metadata(time_from=win_from, time_to=win_to)
+    tape = build_tape(articles)
     corpus = _build_corpus(articles)
-    snapshot = _desk_snapshot(dashboard, tags_meta, [])
+    snapshot = _desk_snapshot(dashboard, tags_meta, []) + "\n" + _tape_snapshot(tape)
 
     parsed = _groq_answer(message, history or [], snapshot, corpus)
     if parsed:
