@@ -7,7 +7,7 @@ from typing import List, Tuple
 
 from app.models import RawArticle
 from app.config import DOMAIN_TAGS, TAG_KEYWORDS, UGLY_KEYWORDS, CATEGORY_TO_TAG
-from app.services.sentiment_analyzer import analyze_text, detect_cross_domain_contagion
+from app.services.sentiment_analyzer import analyze_text
 from app.services.news_fetcher import assign_tags, compute_url_hash
 from app.database import db
 

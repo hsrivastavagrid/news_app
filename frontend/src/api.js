@@ -57,4 +57,6 @@ export const api = {
       body: JSON.stringify({ message, persist }),
     }),
   fetchNow: () => request("/api/fetch-now", { method: "POST" }),
+  chat: (body) =>
+    request("/api/chat", { method: "POST", body: JSON.stringify(body) }),
 };

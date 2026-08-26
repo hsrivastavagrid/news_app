@@ -25,6 +25,8 @@ from app.models import (
     PreferenceSchema,
     AgentFilterRequest,
     AgentFilterResponse,
+    ChatRequest,
+    ChatResponse,
 )
 
 logger = logging.getLogger("newspulse.api")
@@ -219,6 +221,28 @@ def agent_filter(body: AgentFilterRequest):
         result.persisted = True
         logger.info("activity agent_filter persisted=true")
     return result
+
+
+@app.post("/api/chat", response_model=ChatResponse)
+def desk_chat(body: ChatRequest):
+    from app.services.desk_chat import answer_desk_question
+
+    logger.info("activity chat message_len=%s history=%s", len(body.message or ""), len(body.history or []))
+    if not (body.message or "").strip():
+        raise HTTPException(status_code=400, detail="message is required")
+    try:
+        result = answer_desk_question(
+            message=body.message.strip(),
+            history=[t.model_dump() for t in body.history],
+            tags=body.tags,
+            sentiments=body.sentiments,
+            keywords=body.keywords,
+            tag_mode=body.tag_mode or "union",
+        )
+    except Exception:
+        logger.exception("desk chat failed")
+        raise
+    return ChatResponse(**result)
 
 
 @app.post("/api/synthesize")

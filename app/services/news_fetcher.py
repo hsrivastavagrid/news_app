@@ -18,7 +18,7 @@ from app.config import (
     DOMAIN_TAGS,
 )
 from app.models import RawArticle
-from app.services.sentiment_analyzer import analyze_text, detect_cross_domain_contagion
+from app.services.sentiment_analyzer import analyze_text
 from app.database import db
 
 logger = logging.getLogger("newspulse.fetcher")
@@ -387,9 +387,6 @@ def process_raw_articles(
 
     # 4. Generate hourly snapshots
     db.create_hourly_tag_snapshots()
-
-    # 5. Run contagion detection
-    detect_cross_domain_contagion()
 
     return total_new_articles
 
