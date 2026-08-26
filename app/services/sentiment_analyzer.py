@@ -1,3 +1,4 @@
+import logging
 import re
 from typing import Optional, List, Dict
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
@@ -11,6 +12,8 @@ from app.config import (
 )
 from app.models import SentimentResult
 from app.database import db
+
+logger = logging.getLogger("newspulse.sentiment")
 
 # Initialize VADER Analyzer once
 vader = SentimentIntensityAnalyzer()
@@ -109,6 +112,12 @@ def detect_cross_domain_contagion():
                         f"(Delta {round(delta_a, 2)}). Historical ripple effect predicts {tag_b.title()} "
                         f"may shift negative within 2-4 hours."
                     )
+                    logger.info(
+                        "contagion alert %s -> %s severity=%s",
+                        tag_a,
+                        tag_b,
+                        "high" if delta_a <= -0.5 else "moderate",
+                    )
                     db.insert_contagion_event(
                         source_tag=tag_a,
                         target_tag=tag_b,
@@ -117,7 +126,7 @@ def detect_cross_domain_contagion():
                         target_current=round(curr_b, 3),
                         message=msg,
                     )
-    except Exception as e:
-        print(f"Error during contagion detection: {e}")
+    except Exception:
+        logger.exception("contagion detection failed")
     finally:
         conn.close()

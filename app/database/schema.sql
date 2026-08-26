@@ -53,6 +53,18 @@ CREATE TABLE IF NOT EXISTS contagion_events (
     resolved BOOLEAN DEFAULT 0
 );
 
+-- Single-user personalization (priority tags, sentiments, keywords)
+CREATE TABLE IF NOT EXISTS user_preferences (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    tags TEXT NOT NULL DEFAULT '[]',
+    sentiments TEXT NOT NULL DEFAULT '["good","bad","ugly","neutral"]',
+    keywords TEXT NOT NULL DEFAULT '[]',
+    tag_mode TEXT NOT NULL DEFAULT 'union',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT OR IGNORE INTO user_preferences (id) VALUES (1);
+
 -- Indexes for performance
 CREATE INDEX IF NOT EXISTS idx_article_tags_tag ON article_tags(tag);
 CREATE INDEX IF NOT EXISTS idx_article_tags_article ON article_tags(article_id);

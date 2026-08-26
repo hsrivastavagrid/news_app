@@ -10,7 +10,7 @@
 - **Deadline Delivered:** Complete full-stack implementation within 1.5 days.
 - **Primary Data Source:** [NewsAPI.org](https://newsapi.org/) (Top Headlines API) with fallback support for Currents API and dynamic mock generation.
 - **Unique Selling Proposition (USP):** **Cross-Domain Contagion Alerts** — automatically detects sharp sentiment drops in leading sectors (e.g., Politics/Tech) and warns analysts 2–4 hours before the negative sentiment spills over into connected domains (e.g., Finance).
-- **UI Architecture:** Streamlit SPA styled with a dark glassmorphic design system, `image.png` background, Times New Roman typography, zero emojis, Plotly charts, and a live ticking clock (GMT +5:30).
+- **UI Architecture:** FastAPI-served vanilla SPA (`app/static`) with glassmorphism, Chart.js, multi-select tag intersection, and a rolling last-hour news window.
 
 ---
 
@@ -32,8 +32,8 @@ flowchart TD
     end
 
     subgraph Presentation & UI Layer
-        F --> I[FastAPI Backend REST API]
-        F --> J[Streamlit Interactive Dashboard]
+        F --> I[FastAPI REST API]
+        I --> J[Vanilla SPA Dashboard]
         H -->|Alert Banners| J
     end
 ```
@@ -112,12 +112,11 @@ $$\Delta S_{\text{domain}} = S_{\text{current}} - S_{\text{historical}}$$
 
 ---
 
-### 4. 📺 Streamlit SPA Interface Features
-- **Top-Right Live Clock:** Ticking IST time (`DD/MM/YYYY HH:MM:SS AM/PM (GMT +5:30)`) rendered via an isolated HTML5 component (`components.html`).
-- **Broader View (Hero Box):** Displays the last-hour overall mood across all 8 news sectors combined.
+### 4. FastAPI SPA Interface Features
+- **Broader View (Hero):** Last-hour overall mood across all domain tags.
 - **Per-Tag Mode Badges:** Dynamic mode indicators for each domain tag (Politics, Finance, Tech, Health, Sports, Science, Entertainment, World News).
 - **Multi-Select Tag Bar:** Interactively filters cards, donut chart, 24h trend line, and live feed to exact tag intersections.
-- **Live News Feed:** Formatted timestamps (`DD/MM/YYYY hh:mm:ss AM/PM (GMT +5:30)`), sentiment badges, source names, and article links.
+- **Live News Feed:** Sentiment badges, source names, and article links, scoped to the rolling last-hour window.
 
 ---
 
@@ -135,7 +134,8 @@ news-pulse/
 │   │   ├── sentiment_analyzer.py  # VADER sentiment scoring & contagion detection
 │   │   ├── news_fetcher.py        # NewsAPI / Currents fetcher, tag assigner & mock pipeline
 │   │   └── scheduler.py           # APScheduler background hourly fetch job
-│   ├── main.py                    # FastAPI REST API endpoints
+│   ├── main.py                    # FastAPI REST API + static SPA mount
+│   └── static/                    # Dashboard SPA (index.html, app.js, style.css)
 ├── data/
 │   └── news_pulse.db              # SQLite database storage (ignored in git)
 ├── docs/
@@ -148,8 +148,7 @@ news-pulse/
 ├── .env                           # Environment variables (ignored in git)
 ├── .env.example                   # Environment variable template
 ├── .gitignore                     # Git ignore rules for .env, .venv, *.db
-├── requirements.txt               # Dependencies (FastAPI, Streamlit, Plotly, VADER, APScheduler)
-├── streamlit_app.py               # Streamlit SPA dashboard
+├── requirements.txt               # Dependencies (FastAPI, VADER, APScheduler)
 └── report.md                      # Comprehensive project technical report
 ```
 
@@ -203,17 +202,12 @@ HOST=0.0.0.0
 FETCH_INTERVAL_MINUTES=60
 ```
 
-### 3. Launch Streamlit Application
-```bash
-streamlit run streamlit_app.py
-```
-Open browser at `http://localhost:8501`.
-
-### 4. (Optional) Launch FastAPI Backend Service
+### 3. Launch FastAPI (API + SPA)
 ```bash
 python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
-API Documentation available at `http://localhost:8000/docs`.
+Dashboard: `http://localhost:8000`  
+API docs: `http://localhost:8000/docs`
 
 ---
 

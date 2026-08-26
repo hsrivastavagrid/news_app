@@ -1,6 +1,6 @@
 import pytest
 from app.services.news_fetcher import assign_tags
-from app.database.db import build_intersection_query
+from app.database.db import build_intersection_query, build_filter_clauses
 
 def test_assign_tags_multi_category():
     # Political + Financial news
@@ -22,3 +22,19 @@ def test_build_intersection_query_multi_tags():
     assert "JOIN article_tags at_0" in sql
     assert "JOIN article_tags at_1" in sql
     assert params == ["politics", "finance"]
+
+def test_build_filter_union_with_sentiment_and_keywords():
+    from_clause, where_sql, params = build_filter_clauses(
+        tags=["tech", "finance"],
+        tag_mode="union",
+        sentiments=["good", "bad"],
+        keywords=["AI"],
+        time_from="2026-08-26 10:00:00",
+        time_to="2026-08-26 11:00:00",
+    )
+    assert from_clause == "FROM articles a"
+    assert "tag IN" in where_sql
+    assert "sentiment_label IN" in where_sql
+    assert "LIKE" in where_sql
+    assert "tech" in params and "finance" in params
+    assert "good" in params and "bad" in params

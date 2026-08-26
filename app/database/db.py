@@ -1,7 +1,12 @@
+import json
+import logging
 import sqlite3
 import datetime
 from typing import List, Dict, Any, Optional, Tuple
+
+logger = logging.getLogger("newspulse.db")
 from app.config import DB_PATH, DOMAIN_TAGS, TAG_METADATA
+from app.urls import source_article_url
 from app.models import (
     RawArticle,
     SentimentResult,
@@ -10,6 +15,7 @@ from app.models import (
     DashboardModeSchema,
     TrendPointSchema,
     ContagionEventSchema,
+    PreferenceSchema,
 )
 
 def get_rolling_window() -> Tuple[str, str]:
@@ -43,8 +49,43 @@ def init_db():
     try:
         conn.executescript(schema_sql)
         conn.commit()
+        logger.info("database schema applied path=%s", DB_PATH)
+        purged = purge_non_live_articles(conn)
+        if purged:
+            logger.info("purged non-live articles count=%s", purged)
+        conn.commit()
+    except Exception:
+        logger.exception("database init failed path=%s", DB_PATH)
+        raise
     finally:
         conn.close()
+
+
+def purge_non_live_articles(conn: Optional[sqlite3.Connection] = None) -> int:
+    """Delete mock/synth rows (fake hosts, Google-search fallbacks, demo sources)."""
+    own = conn is None
+    if own:
+        conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            """
+            DELETE FROM articles
+            WHERE source_name IN ('NewsPulse Global Service', 'NewsPulse Syndicate')
+               OR IFNULL(url, '') LIKE '%example.com%'
+               OR IFNULL(url, '') LIKE '%/articles/synth-%'
+               OR IFNULL(url, '') LIKE '%news.google.com/search%'
+               OR IFNULL(title, '') LIKE '%(Cycle %'
+            """
+        )
+        deleted = cursor.rowcount or 0
+        if own:
+            conn.commit()
+        return deleted
+    finally:
+        if own:
+            conn.close()
+
 
 def insert_article(
     raw: RawArticle,
@@ -108,9 +149,10 @@ def insert_article(
                 )
         conn.commit()
         return article_id
-    except Exception as e:
+    except Exception:
         conn.rollback()
-        raise e
+        logger.exception("insert_article failed url_hash=%s", raw.url_hash)
+        raise
     finally:
         conn.close()
 
@@ -189,25 +231,81 @@ def build_intersection_query(tags: Optional[List[str]]) -> Tuple[str, List[Any]]
     query_from = f"FROM articles a {' '.join(joins)}"
     return query_from, params
 
+def build_filter_clauses(
+    tags: Optional[List[str]] = None,
+    tag_mode: str = "union",
+    sentiments: Optional[List[str]] = None,
+    keywords: Optional[List[str]] = None,
+    time_from: Optional[str] = None,
+    time_to: Optional[str] = None,
+) -> Tuple[str, str, List[Any]]:
+    """FROM + WHERE for personalized feed filters. Default tag_mode is UNION (any selected tag)."""
+    tags_clean = [t.strip().lower() for t in tags if t and t.strip()] if tags else []
+    sentiments_clean = [s.strip().lower() for s in sentiments if s and s.strip()] if sentiments else []
+    keywords_clean = [k.strip() for k in keywords if k and k.strip()] if keywords else []
+    mode = (tag_mode or "union").lower()
+    if mode not in ("union", "intersection"):
+        mode = "union"
+
+    params: List[Any] = []
+    if tags_clean and mode == "intersection":
+        from_clause, params = build_intersection_query(tags_clean)
+    else:
+        from_clause = "FROM articles a"
+
+    wheres: List[str] = []
+    if tags_clean and mode == "union":
+        placeholders = ",".join("?" * len(tags_clean))
+        wheres.append(
+            f"a.id IN (SELECT article_id FROM article_tags WHERE tag IN ({placeholders}))"
+        )
+        params.extend(tags_clean)
+
+    if time_from and time_to:
+        wheres.append(
+            "datetime(a.published_at) >= datetime(?) AND datetime(a.published_at) <= datetime(?)"
+        )
+        params.extend([time_from, time_to])
+
+    if sentiments_clean:
+        placeholders = ",".join("?" * len(sentiments_clean))
+        wheres.append(f"a.sentiment_label IN ({placeholders})")
+        params.extend(sentiments_clean)
+
+    if keywords_clean:
+        kw_parts = []
+        for kw in keywords_clean:
+            kw_parts.append("(LOWER(a.title) LIKE ? OR LOWER(IFNULL(a.description, '')) LIKE ?)")
+            like = f"%{kw.lower()}%"
+            params.extend([like, like])
+        wheres.append("(" + " OR ".join(kw_parts) + ")")
+
+    where_str = f"WHERE {' AND '.join(wheres)}" if wheres else ""
+    return from_clause, where_str, params
+
 def get_dashboard_mode(
     tags: Optional[List[str]] = None,
     time_from: Optional[str] = None,
     time_to: Optional[str] = None,
+    tag_mode: str = "union",
+    sentiments: Optional[List[str]] = None,
+    keywords: Optional[List[str]] = None,
 ) -> DashboardModeSchema:
     """
-    Calculates overall sentiment mode for selected tag intersection within a rolling time window.
-    time_from / time_to are ISO datetime strings (UTC). Filters articles published_at between time_from and time_to.
+    Calculates overall sentiment mode for the personalized filter set within a rolling time window.
+    Default tag_mode is union (any selected priority tag).
     """
     conn = get_db_connection()
     cursor = conn.cursor()
     tags_clean = [t.strip().lower() for t in tags if t.strip()] if tags else []
-
-    from_clause, params = build_intersection_query(tags_clean)
-    if time_from and time_to:
-        where_clause = "WHERE datetime(a.published_at) >= datetime(?) AND datetime(a.published_at) <= datetime(?)"
-        params = params + [time_from, time_to]
-    else:
-        where_clause = ""
+    from_clause, where_clause, params = build_filter_clauses(
+        tags=tags_clean,
+        tag_mode=tag_mode,
+        sentiments=sentiments,
+        keywords=keywords,
+        time_from=time_from,
+        time_to=time_to,
+    )
     
     sql = f"""
         SELECT 
@@ -293,29 +391,31 @@ def get_trends(tags: Optional[List[str]] = None, hours: int = 24) -> List[TrendP
 def get_articles(
     tags: Optional[List[str]] = None,
     sentiment: Optional[str] = None,
+    sentiments: Optional[List[str]] = None,
+    keywords: Optional[List[str]] = None,
+    tag_mode: str = "union",
     time_from: Optional[str] = None,
     time_to: Optional[str] = None,
-    limit: int = 50
+    limit: int = 100
 ) -> List[ArticleSchema]:
     """
-    Fetches articles matching multi-tag intersection, optional sentiment filter, and rolling time window.
-    time_from / time_to are ISO datetime strings (UTC) bounding the window (start <= published_at <= end).
+    Personalized article feed: tag union (default) or intersection, sentiment allow-list, keyword match.
     """
     conn = get_db_connection()
     cursor = conn.cursor()
     tags_clean = [t.strip().lower() for t in tags if t.strip()] if tags else []
+    sent_list = list(sentiments or [])
+    if sentiment and sentiment.strip():
+        sent_list.append(sentiment.strip().lower())
 
-    from_clause, params = build_intersection_query(tags_clean)
-
-    where_clauses = []
-    if time_from and time_to:
-        where_clauses.append("datetime(a.published_at) >= datetime(?) AND datetime(a.published_at) <= datetime(?)")
-        params = params + [time_from, time_to]
-    if sentiment:
-        where_clauses.append("a.sentiment_label = ?")
-        params.append(sentiment.lower())
-
-    where_str = f"WHERE {' AND '.join(where_clauses)}" if where_clauses else ""
+    from_clause, where_str, params = build_filter_clauses(
+        tags=tags_clean,
+        tag_mode=tag_mode,
+        sentiments=sent_list,
+        keywords=keywords,
+        time_from=time_from,
+        time_to=time_to,
+    )
     
     sql = f"""
         SELECT DISTINCT
@@ -350,7 +450,7 @@ def get_articles(
                     description=r["description"],
                     source_name=r["source_name"],
                     api_category=r["api_category"],
-                    url=r["url"],
+                    url=source_article_url(r["url"]) or "",
                     image_url=r["image_url"],
                     published_at=r["published_at"],
                     fetched_at=r["fetched_at"],
@@ -417,6 +517,59 @@ def create_hourly_tag_snapshots():
                     ),
                 )
         conn.commit()
+    finally:
+        conn.close()
+
+def get_preferences() -> PreferenceSchema:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        cursor.execute(
+            "SELECT tags, sentiments, keywords, tag_mode, updated_at FROM user_preferences WHERE id = 1"
+        )
+        row = cursor.fetchone()
+        if not row:
+            return PreferenceSchema()
+        return PreferenceSchema(
+            tags=json.loads(row["tags"] or "[]"),
+            sentiments=json.loads(row["sentiments"] or "[]"),
+            keywords=json.loads(row["keywords"] or "[]"),
+            tag_mode=row["tag_mode"] or "union",
+            updated_at=row["updated_at"],
+        )
+    finally:
+        conn.close()
+
+def save_preferences(prefs: PreferenceSchema) -> PreferenceSchema:
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    now_str = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        cursor.execute(
+            """
+            INSERT INTO user_preferences (id, tags, sentiments, keywords, tag_mode, updated_at)
+            VALUES (1, ?, ?, ?, ?, ?)
+            ON CONFLICT(id) DO UPDATE SET
+                tags = excluded.tags,
+                sentiments = excluded.sentiments,
+                keywords = excluded.keywords,
+                tag_mode = excluded.tag_mode,
+                updated_at = excluded.updated_at;
+            """,
+            (
+                json.dumps(prefs.tags or []),
+                json.dumps(prefs.sentiments or ["good", "bad", "ugly", "neutral"]),
+                json.dumps(prefs.keywords or []),
+                prefs.tag_mode or "union",
+                now_str,
+            ),
+        )
+        conn.commit()
+        logger.info("preferences saved tag_mode=%s tags=%s", prefs.tag_mode, prefs.tags)
+        return get_preferences()
+    except Exception:
+        logger.exception("save_preferences failed")
+        raise
     finally:
         conn.close()
 
