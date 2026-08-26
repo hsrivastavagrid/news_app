@@ -23,7 +23,7 @@ function renderAnswer(text) {
   });
 }
 
-export default function ChatBubble({ filters }) {
+export default function ChatBubble({ filters, articles = [] }) {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
@@ -76,6 +76,7 @@ export default function ChatBubble({ filters }) {
         sentiments: filters.sentiments || [],
         keywords: filters.keywords || [],
         tag_mode: filters.tagMode || "union",
+        article_ids: (articles || []).map((a) => a.id).filter(Boolean),
       });
       setMessages((prev) => [
         ...prev,
@@ -83,6 +84,7 @@ export default function ChatBubble({ filters }) {
           role: "assistant",
           content: result.answer || "",
           citations: result.citations || [],
+          desk_count: result.desk_count || 0,
         },
       ]);
     } catch (err) {
@@ -107,6 +109,9 @@ export default function ChatBubble({ filters }) {
           <div>
             <p className="kicker">Desk correspondent</p>
             <h3>Wire chat</h3>
+            <p className="chat-desk-n" data-testid="chat-desk-count">
+              Live feed · {(articles || []).length} cards on the desk
+            </p>
           </div>
           <div className="chat-head-actions">
             <button
@@ -162,7 +167,7 @@ export default function ChatBubble({ filters }) {
                 <span className="think-nib" />
                 <span className="think-nib" />
               </div>
-              <p className="think-caption">Reading the wire… citing the desk</p>
+              <p className="think-caption">Scanning headlines, then reading related stories…</p>
             </article>
           ) : null}
           {error ? <p className="chat-error">{error}</p> : null}
@@ -192,7 +197,7 @@ export default function ChatBubble({ filters }) {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={onKey}
-            placeholder="Ask the desk — answers cite fetched stories"
+            placeholder="Ask the desk — it scans every headline, then reads related stories"
             disabled={thinking}
             data-testid="chat-input"
           />

@@ -33,7 +33,7 @@ function toCsv(list) {
   return (list || []).filter(Boolean).join(",");
 }
 
-export function buildQuery({ tags, sentiments, keywords, tagMode, limit = 100 }) {
+export function buildQuery({ tags, sentiments, keywords, tagMode, limit = 200 }) {
   const params = new URLSearchParams();
   if (tags?.length) params.set("tags", toCsv(tags));
   if (sentiments?.length) params.set("sentiments", toCsv(sentiments));

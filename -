@@ -1,0 +1,6 @@
+# NewsPulse API Configuration
+NEWSAPI_KEY=your_newsapi_org_key_here
+CURRENTS_API_KEY=your_currents_api_key_here
+PORT=8000
+HOST=0.0.0.0
+FETCH_INTERVAL_MINUTES=60

@@ -1,0 +1,16 @@
+{
+  "defaultMode": "acceptEdits",
+  "permissions": {
+    "allow": [
+      "Read(**)",
+      "Edit(docs/project/**)",
+      "Write(docs/project/**)",
+      "Edit(.claude/alfred-*.json)",
+      "Write(.claude/alfred-*.json)",
+      "Edit(.claude/alfred-*.md)",
+      "Write(.claude/alfred-*.md)",
+      "Bash(python3 *)",
+      "Bash(python3 .claude/alfred-continuity.py *)"
+    ]
+  }
+}
