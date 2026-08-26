@@ -390,6 +390,14 @@ span.read-full {
   border-bottom: 3px solid var(--ink);
 }
 .chat-head h3 { margin: 2px 0 0; font-size: 1.25rem; }
+.chat-desk-n {
+  margin: 4px 0 0;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.62rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--neutral);
+}
 .chat-head-actions { display: flex; gap: 6px; }
 .btn-sm { padding: 6px 8px; font-size: 0.65rem; }
 

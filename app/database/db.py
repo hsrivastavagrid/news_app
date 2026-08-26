@@ -439,27 +439,71 @@ def get_articles(
             t_rows = cursor.fetchall()
             art_tags = [tr["tag"] for tr in t_rows]
             
-            articles.append(
-                ArticleSchema(
-                    id=r["id"],
-                    url_hash=r["url_hash"],
-                    title=r["title"],
-                    description=r["description"],
-                    source_name=r["source_name"],
-                    api_category=r["api_category"],
-                    url=source_article_url(r["url"]) or "",
-                    image_url=r["image_url"],
-                    published_at=r["published_at"],
-                    fetched_at=r["fetched_at"],
-                    compound_score=r["compound_score"],
-                    positive_score=r["positive_score"],
-                    negative_score=r["negative_score"],
-                    neutral_score=r["neutral_score"],
-                    sentiment_label=r["sentiment_label"],
-                    tags=art_tags,
-                )
-            )
+            articles.append(_article_from_row(r, art_tags))
         return articles
+    finally:
+        conn.close()
+
+
+def _article_from_row(r, art_tags: List[str]) -> ArticleSchema:
+    return ArticleSchema(
+        id=r["id"],
+        url_hash=r["url_hash"],
+        title=r["title"],
+        description=r["description"],
+        source_name=r["source_name"],
+        api_category=r["api_category"],
+        url=source_article_url(r["url"]) or "",
+        image_url=r["image_url"],
+        published_at=r["published_at"],
+        fetched_at=r["fetched_at"],
+        compound_score=r["compound_score"],
+        positive_score=r["positive_score"],
+        negative_score=r["negative_score"],
+        neutral_score=r["neutral_score"],
+        sentiment_label=r["sentiment_label"],
+        tags=art_tags,
+    )
+
+
+def get_articles_by_ids(ids: Optional[List[int]] = None) -> List[ArticleSchema]:
+    """Load specific desk cards by id (order preserved)."""
+    ids_clean: List[int] = []
+    seen = set()
+    for raw in ids or []:
+        try:
+            n = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if n > 0 and n not in seen:
+            seen.add(n)
+            ids_clean.append(n)
+    if not ids_clean:
+        return []
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    try:
+        by_id = {}
+        for i in range(0, len(ids_clean), 400):
+            chunk = ids_clean[i : i + 400]
+            placeholders = ",".join("?" * len(chunk))
+            cursor.execute(
+                f"""
+                SELECT
+                    a.id, a.url_hash, a.title, a.description, a.source_name,
+                    a.api_category, a.url, a.image_url, a.published_at, a.fetched_at,
+                    a.compound_score, a.positive_score, a.negative_score, a.neutral_score,
+                    a.sentiment_label
+                FROM articles a
+                WHERE a.id IN ({placeholders})
+                """,
+                chunk,
+            )
+            for r in cursor.fetchall():
+                cursor.execute("SELECT tag FROM article_tags WHERE article_id = ?", (r["id"],))
+                art_tags = [tr["tag"] for tr in cursor.fetchall()]
+                by_id[r["id"]] = _article_from_row(r, art_tags)
+        return [by_id[i] for i in ids_clean if i in by_id]
     finally:
         conn.close()
 

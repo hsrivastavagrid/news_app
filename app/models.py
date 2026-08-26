@@ -144,6 +144,7 @@ class ChatRequest(BaseModel):
     sentiments: List[str] = []
     keywords: List[str] = []
     tag_mode: str = "union"
+    article_ids: List[int] = []
 
 class ChatCitation(BaseModel):
     id: int
@@ -156,3 +157,4 @@ class ChatCitation(BaseModel):
 class ChatResponse(BaseModel):
     answer: str
     citations: List[ChatCitation] = []
+    desk_count: int = 0

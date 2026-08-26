@@ -48,7 +48,7 @@ export default function App() {
       sentiments: filters.sentiments,
       keywords: keywordsFromText(filters.keywordsText),
       tagMode: filters.tagMode,
-      limit: 100,
+      limit: 200,
     }),
     [filters]
   );
@@ -91,7 +91,7 @@ export default function App() {
           sentiments: initial.sentiments,
           keywords: keywordsFromText(initial.keywordsText),
           tagMode: initial.tagMode,
-          limit: 100,
+          limit: 200,
         });
       } catch (err) {
         log.error("preferences load failed", err);
@@ -101,7 +101,7 @@ export default function App() {
           sentiments: ALL_SENTIMENTS,
           keywords: [],
           tagMode: "union",
-          limit: 100,
+          limit: 200,
         });
       } finally {
         setReady(true);
@@ -161,7 +161,7 @@ export default function App() {
         sentiments: next.sentiments,
         keywords: keywordsFromText(next.keywordsText),
         tagMode: next.tagMode,
-        limit: 100,
+        limit: 200,
       });
     } catch (err) {
       log.error("agent filter failed", err);
@@ -262,7 +262,7 @@ export default function App() {
           </div>
         )}
       </main>
-      <ChatBubble filters={queryFilters} />
+      <ChatBubble filters={queryFilters} articles={articles} />
     </div>
   );
 }

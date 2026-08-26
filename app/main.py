@@ -151,7 +151,7 @@ def get_articles(
     sentiments: Optional[str] = Query(None, description="Comma-separated: good,bad,ugly,neutral"),
     keywords: Optional[str] = Query(None, description="Comma-separated keyword matches"),
     tag_mode: str = Query("union", description="union (any tag) or intersection (all tags)"),
-    limit: int = Query(100, ge=1, le=200),
+    limit: int = Query(200, ge=1, le=500),
 ):
     tag_list = parse_csv(tags)
     sent_list = parse_csv(sentiments)
@@ -278,6 +278,7 @@ def desk_chat(body: ChatRequest):
             sentiments=body.sentiments,
             keywords=body.keywords,
             tag_mode=body.tag_mode or "union",
+            article_ids=body.article_ids,
         )
     except Exception:
         logger.exception("desk chat failed")

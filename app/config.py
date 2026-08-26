@@ -27,6 +27,12 @@ LOG_FILE = os.getenv("LOG_FILE", str(BASE_DIR / "logs" / "newspulse.log"))
 # Database
 DB_PATH = BASE_DIR / "data" / "news_pulse.db"
 
+# Chat agent: title index of the live desk, then read only related stories.
+# Groq on-demand qwen/qwen3.8-27b is capped at 8000 TPM per request.
+CHAT_ARTICLE_LIMIT = int(os.getenv("CHAT_ARTICLE_LIMIT", "500"))
+CHAT_READ_LIMIT = int(os.getenv("CHAT_READ_LIMIT", "8"))
+CHAT_MAX_OUTPUT_TOKENS = int(os.getenv("CHAT_MAX_OUTPUT_TOKENS", "700"))
+
 # API Endpoints
 NEWSAPI_BASE_URL = "https://newsapi.org/v2/top-headlines"
 NEWSAPI_EVERYTHING_URL = "https://newsapi.org/v2/everything"
