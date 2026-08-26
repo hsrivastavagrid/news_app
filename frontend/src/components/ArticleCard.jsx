@@ -68,6 +68,22 @@ export default function ArticleCard({ article }) {
           )}
         </h3>
         {article.description ? <p className="dek">{article.description}</p> : null}
+        {(article.companies || []).length || article.event_label ? (
+          <div className="story-market" data-testid="story-market">
+            {(article.companies || []).map((c) => (
+              <span key={c.ticker} className="chip ticker">
+                {c.ticker}
+              </span>
+            ))}
+            {article.event_label ? <span className="chip event">{article.event_label}</span> : null}
+            {article.signal ? (
+              <span className={`chip signal signal-${article.signal}`}>
+                {article.signal.replace("_", "-")}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+        {article.thesis ? <p className="thesis">{article.thesis}</p> : null}
         <div className="story-tags">
           {(article.tags || []).map((t) => (
             <span key={t} className="chip">

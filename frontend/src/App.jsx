@@ -5,6 +5,7 @@ import Sidebar from "./components/Sidebar.jsx";
 import ArticleCard from "./components/ArticleCard.jsx";
 import StatsBar from "./components/StatsBar.jsx";
 import ChatBubble from "./components/ChatBubble.jsx";
+import TapePanel from "./components/TapePanel.jsx";
 
 const ALL_SENTIMENTS = ["good", "bad", "ugly", "neutral"];
 
@@ -35,6 +36,7 @@ export default function App() {
   });
   const [dashboard, setDashboard] = useState(null);
   const [articles, setArticles] = useState([]);
+  const [tape, setTape] = useState(null);
   const [agentNote, setAgentNote] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -55,14 +57,16 @@ export default function App() {
     setLoading(true);
     setError("");
     try {
-      const [tags, dash, arts] = await Promise.all([
+      const [tags, dash, arts, nextTape] = await Promise.all([
         api.tags(),
         api.dashboard(nextFilters),
         api.articles(nextFilters),
+        api.tape(nextFilters),
       ]);
       setTagsMeta(tags);
       setDashboard(dash);
       setArticles(arts);
+      setTape(nextTape);
     } catch (err) {
       log.error("load feed failed", err);
       setError(err.message || "Failed to load feed");
@@ -200,8 +204,8 @@ export default function App() {
       <main className="edition" data-testid="edition">
         <header className="edition-head">
           <div>
-            <p className="kicker">Personal edition</p>
-            <h2>Stories matching your desk</h2>
+            <p className="kicker">Trader edition</p>
+            <h2>Issuers, events, and headline risk</h2>
           </div>
           <div className="edition-actions">
             <button
@@ -231,6 +235,19 @@ export default function App() {
           articleCount={articles.length}
           sourceCount={sources}
           windowLabel={formatWindow(dashboard?.window_from, dashboard?.window_to)}
+          tape={tape}
+        />
+
+        <TapePanel
+          tape={tape}
+          onSelectTicker={(ticker, name) => {
+            const next = ticker || name;
+            setFilters((prev) => ({
+              ...prev,
+              keywordsText: next,
+              tags: prev.tags.includes("finance") ? prev.tags : [...prev.tags, "finance"],
+            }));
+          }}
         />
 
         {articles.length === 0 ? (

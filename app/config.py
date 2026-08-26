@@ -92,11 +92,14 @@ TAG_KEYWORDS = {
         "government", "vote", "opposition", "coalition", "mandate", "politics", "political"
     },
     "finance": {
-        "stock", "market", "shares", "investor", "gdp", "inflation", "fed",
-        "interest rate", "earnings", "revenue", "ipo", "nasdaq", "dow jones",
-        "wall street", "hedge fund", "cryptocurrency", "bitcoin", "bond",
-        "recession", "bailout", "dividend", "merger", "acquisition", "forex",
-        "banking", "economy", "fiscal", "monetary", "finance", "financial"
+        "stock", "stocks", "market", "markets", "shares", "shareholder", "investor",
+        "gdp", "inflation", "fed", "fomc", "interest rate", "rate hike", "rate cut",
+        "earnings", "eps", "guidance", "revenue", "ipo", "nasdaq", "dow jones",
+        "s&p", "wall street", "hedge fund", "cryptocurrency", "bitcoin", "bond",
+        "recession", "bailout", "dividend", "buyback", "merger", "acquisition",
+        "forex", "banking", "economy", "fiscal", "monetary", "finance", "financial",
+        "price target", "downgrade", "upgrade", "sec", "treasury", "yield",
+        "volatility", "options", "futures", "short interest",
     },
     "tech": {
         "ai", "artificial intelligence", "startup", "software", "hardware",

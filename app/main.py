@@ -27,6 +27,7 @@ from app.models import (
     AgentFilterResponse,
     ChatRequest,
     ChatResponse,
+    TapeSchema,
 )
 
 logger = logging.getLogger("newspulse.api")
@@ -57,8 +58,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="NewsPulse — Personalized News Sentiment API",
-    description="Self-contained backend: hourly ingest, VADER sentiment, tags, agent filters.",
+    title="NewsPulse — Trader news desk",
+    description="Hourly ingest, issuer tape, headline risk signals, VADER sentiment, tags, cited chat.",
     version="2.0.0",
     lifespan=lifespan,
 )
@@ -164,16 +165,55 @@ def get_articles(
         tag_mode,
         limit,
     )
-    return db.get_articles(
-        tags=tag_list,
-        sentiment=sentiment,
-        sentiments=sent_list or None,
-        keywords=kw_list or None,
-        tag_mode=tag_mode,
-        time_from=win_from,
-        time_to=win_to,
-        limit=limit,
+    from app.services.market_desk import decorate_articles
+
+    return decorate_articles(
+        db.get_articles(
+            tags=tag_list,
+            sentiment=sentiment,
+            sentiments=sent_list or None,
+            keywords=kw_list or None,
+            tag_mode=tag_mode,
+            time_from=win_from,
+            time_to=win_to,
+            limit=limit,
+        )
     )
+
+
+@app.get("/api/tape", response_model=TapeSchema)
+def get_tape(
+    tags: Optional[str] = Query(None),
+    sentiments: Optional[str] = Query(None),
+    keywords: Optional[str] = Query(None),
+    tag_mode: str = Query("union"),
+):
+    """Named issuers and desk signals for the current hour (headline risk, not quotes)."""
+    from app.services.market_desk import build_tape, decorate_articles
+
+    tag_list = parse_csv(tags)
+    sent_list = parse_csv(sentiments)
+    kw_list = [k.strip() for k in (keywords or "").split(",") if k.strip()]
+    win_from, win_to = rolling_window()
+    articles = decorate_articles(
+        db.get_articles(
+            tags=tag_list,
+            sentiments=sent_list or None,
+            keywords=kw_list or None,
+            tag_mode=tag_mode,
+            time_from=win_from,
+            time_to=win_to,
+            limit=200,
+        )
+    )
+    tape = build_tape(articles)
+    logger.info(
+        "activity tape names=%s risk_off=%s risk_on=%s",
+        tape.name_count,
+        tape.risk_off_count,
+        tape.risk_on_count,
+    )
+    return tape
 
 
 @app.get("/api/contagion", response_model=List[ContagionEventSchema])

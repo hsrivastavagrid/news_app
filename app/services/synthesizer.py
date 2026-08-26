@@ -57,9 +57,11 @@ TEMPLATES = {
     "finance": {
         "subjects": [
             "Federal Reserve Board", "Wall Street Equity Analysts", "Global Investment Bank",
-            "Central Bank Governors", "Stock Market Index", "Hedge Fund Managers",
+            "Central Bank Governors", "S&P 500 Index", "Hedge Fund Managers",
+            "NVIDIA", "Apple Inc", "Tesla", "JPMorgan", "Exxon Mobil",
+            "Microsoft", "Amazon", "Pfizer", "Boeing",
             "Fintech Startup Venture", "International Monetary Fund", "Treasury Department",
-            "Cryptocurrency Exchange", "Corporate Executive Board", "Securities and Exchange Commission",
+            "Coinbase", "Corporate Executive Board", "Securities and Exchange Commission",
             "Private Equity Consortium", "Bond Market Traders", "National Economic Council"
         ],
         "actions": [
@@ -87,6 +89,7 @@ TEMPLATES = {
     },
     "tech": {
         "subjects": [
+            "NVIDIA", "Apple Inc", "Microsoft", "Alphabet", "Meta Platforms",
             "Artificial Intelligence Pioneer", "Silicon Valley Tech Giant", "Semiconductor Chip Maker",
             "Cybersecurity Defense Firm", "Cloud Infrastructure Provider", "Robotics Research Institute",
             "Quantum Computing Venture", "Autonomous Vehicle Laboratory", "Software Engineering Team",

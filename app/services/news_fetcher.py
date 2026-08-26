@@ -207,6 +207,62 @@ def fetch_from_newsapi(category: Optional[str] = None) -> List[RawArticle]:
         return []
 
 
+def fetch_from_newsapi_markets() -> List[RawArticle]:
+    """Second everything query biased to issuers, earnings, rates, and tape-moving events."""
+    if not NEWSAPI_KEY:
+        logger.info("newsapi markets skipped: NEWSAPI_KEY not set")
+        return []
+
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
+    start_iso = (now_utc - datetime.timedelta(hours=1)).isoformat()
+    params = {
+        "q": (
+            'earnings OR "interest rate" OR Nasdaq OR "S&P" OR "Wall Street" OR '
+            "IPO OR merger OR dividend OR Fed OR FOMC OR shares OR investor OR "
+            "downgrade OR upgrade OR bankruptcy OR layoff OR Tesla OR NVIDIA OR Apple"
+        ),
+        "language": "en",
+        "sortBy": "publishedAt",
+        "pageSize": 100,
+        "from": start_iso,
+        "apiKey": NEWSAPI_KEY,
+    }
+    try:
+        with httpx.Client(timeout=20.0) as client:
+            resp = client.get(NEWSAPI_EVERYTHING_URL, params=params)
+            if resp.status_code != 200:
+                logger.error(
+                    "newsapi markets error status=%s body=%s",
+                    resp.status_code,
+                    resp.text[:200],
+                )
+                return []
+            data = resp.json()
+            articles = []
+            for item in data.get("articles", []):
+                art_url = item.get("url")
+                title = item.get("title") or ""
+                if not art_url or title == "[Removed]":
+                    continue
+                articles.append(
+                    RawArticle(
+                        title=title,
+                        description=item.get("description"),
+                        url=art_url,
+                        source_name=(item.get("source") or {}).get("name"),
+                        api_category="business",
+                        image_url=item.get("urlToImage"),
+                        published_at=item.get("publishedAt") or now_utc.isoformat(),
+                        url_hash=compute_url_hash(art_url),
+                    )
+                )
+            logger.info("newsapi markets count=%s", len(articles))
+            return articles
+    except Exception:
+        logger.exception("newsapi markets failed")
+        return []
+
+
 def fetch_from_newsapi_everything() -> List[RawArticle]:
     """Pull a large recent pool from NewsAPI /everything for the last hour."""
     if not NEWSAPI_KEY:
@@ -363,6 +419,8 @@ def process_raw_articles(
     3. Stores articles into SQLite database via db.insert_article()
     4. Computes hourly tag snapshots & triggers contagion detection
     """
+    from app.services.market_desk import finance_tags_for
+
     total_new_articles = 0
     raw_articles = dedupe_fetch_batch(raw_articles)
     logger.info("process batch after in-fetch dedupe count=%s", len(raw_articles))
@@ -373,8 +431,12 @@ def process_raw_articles(
         # 1. Analyze sentiment via sentiment_analyzer.py
         sentiment = analyze_text(raw.title, raw.description)
 
-        # 2. Assign domain tags locally via keyword matching
-        tags = assign_tags(raw.api_category, raw.title, raw.description)
+        # 2. Assign domain tags locally via keyword matching (+ finance if issuers)
+        tags = finance_tags_for(
+            raw.title,
+            raw.description,
+            assign_tags(raw.api_category, raw.title, raw.description),
+        )
 
         # 3. Store in DB
         try:
@@ -456,6 +518,7 @@ def fetch_and_process_news() -> int:
     """
     pooled: List[RawArticle] = []
     pooled.extend(fetch_from_newsapi_everything())
+    pooled.extend(fetch_from_newsapi_markets())
     for category in NEWSAPI_CATEGORIES:
         pooled.extend(fetch_from_newsapi(category=category))
         time.sleep(0.2)

@@ -45,7 +45,7 @@ export default function Sidebar({
       <div className="masthead-mark">
         <span className="kicker">Hourly wire</span>
         <h1 data-testid="brand">NewsPulse</h1>
-        <p>Personalised desk. Fetch wide, filter to your priorities.</p>
+        <p>Trader desk. Map this hour’s stories to issuers, events, and headline risk.</p>
       </div>
 
       <section className="desk-block">
@@ -105,7 +105,7 @@ export default function Sidebar({
           id="keywords"
           data-testid="keywords-input"
           type="text"
-          placeholder="AI, rates, election…"
+          placeholder="NVDA, Fed, earnings…"
           value={filters.keywordsText}
           onChange={(e) => onChange({ ...filters, keywordsText: e.target.value })}
         />
