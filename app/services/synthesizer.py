@@ -299,29 +299,22 @@ UGLY_INJECTORS = [
     "Massacre and human rights abuse allegations spark international legal outrage."
 ]
 
-def synthesize_dataset(records_per_tag: int = 100) -> int:
+def generate_raw_synthesized_articles(records_per_tag: int = 100) -> List[RawArticle]:
     """
-    Generates ~100 unique articles for EACH domain tag (~800 total).
+    Synthesizes raw news articles matching the exact format from NewsAPI.org.
     
-    CRITICAL REQUIREMENTS FULFILLED:
-    1. Same RawArticle structure as NewsAPI.org.
-    2. All headlines & descriptions are unique.
-    3. ~25-30% of articles contain keywords matching >1 domain tag.
-    4. NO hardcoded sentiment scores/labels! Every article is evaluated dynamically via:
-       - analyze_text(title, description) -> calculates VADER scores & Ugly keyword count
-       - assign_tags(api_category, title, description) -> calculates multi-tags
-    5. Inserts into database with fetched_at matching the floor-hour window.
+    NOTE: This function ONLY generates raw data (RawArticle objects).
+    It does NOT perform sentiment analysis, tag assignment, or database storage.
+    All raw articles produced here are fed directly into the standard processing pipeline,
+    where sentiment_analyzer.py evaluates scores and labels identically to live API data.
     """
-    # 1. Compute current floor-hour window bounds
     win_from, win_to = db.get_floor_hour_window()
-    # Pick a timestamp inside the floor-hour window (e.g. 30 mins into the window)
     dt_from = datetime.datetime.strptime(win_from, "%Y-%m-%d %H:%M:%S")
-    window_fetched_at = (dt_from + datetime.timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M:%S")
 
-    total_inserted = 0
+    raw_articles: List[RawArticle] = []
     article_index = 0
 
-    print(f"[Synthesizer] Beginning generation of ~{records_per_tag} records for each of the {len(DOMAIN_TAGS)} tags...")
+    print(f"[Synthesizer] Synthesizing ~{records_per_tag} raw records for each of the {len(DOMAIN_TAGS)} tags...")
 
     for tag in DOMAIN_TAGS:
         template_data = TEMPLATES.get(tag, TEMPLATES["politics"])
@@ -331,7 +324,6 @@ def synthesize_dataset(records_per_tag: int = 100) -> int:
 
         count_for_tag = 0
 
-        # Combinatorial loop to generate ~100 distinct articles per tag
         for s in subjects:
             for a in actions:
                 if count_for_tag >= records_per_tag:
@@ -346,56 +338,50 @@ def synthesize_dataset(records_per_tag: int = 100) -> int:
                     mixer_text = random.choice([m[1] for m in SECONDARY_MIXERS if m[0] == tag] or [SECONDARY_MIXERS[0][1]])
                     description += f"{mixer_text}"
 
-                # Add ugly keyword injector to ~15% of articles to ensure Ugly mode representation
+                # Add ugly keyword injector to ~15% of articles to ensure Ugly mode keywords are present
                 if count_for_tag % 7 == 0:
                     ugly_text = random.choice(UGLY_INJECTORS)
                     description += f" {ugly_text}"
 
-                # Make URL and title unique per record
                 article_index += 1
                 unique_url = f"https://newsapi.org/v2/articles/synth-{tag}-{article_index}-{hashlib.md5(title.encode()).hexdigest()[:8]}"
                 source_name = random.choice(NEWS_SOURCES)
                 published_at = (dt_from + datetime.timedelta(minutes=random.randint(5, 55))).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-                # Create standard RawArticle dataclass (matching NewsAPI response)
-                raw = RawArticle(
-                    title=title,
-                    description=description,
-                    url=unique_url,
-                    source_name=source_name,
-                    api_category=tag if tag in CATEGORY_TO_TAG.values() else "general",
-                    image_url=None,
-                    published_at=published_at,
-                    url_hash=compute_url_hash(unique_url),
+                # Construct standard RawArticle dataclass (matching NewsAPI.org response schema)
+                raw_articles.append(
+                    RawArticle(
+                        title=title,
+                        description=description,
+                        url=unique_url,
+                        source_name=source_name,
+                        api_category=tag if tag in CATEGORY_TO_TAG.values() else "general",
+                        image_url=None,
+                        published_at=published_at,
+                        url_hash=compute_url_hash(unique_url),
+                    )
                 )
+                count_for_tag += 1
 
-                # ====================================================================
-                # DYNAMIC SENTIMENT & TAG EVALUATION (NO SYNTHESIZED SCORES)
-                # ====================================================================
-                # 1. Run through user's VADER + Ugly keyword sentiment analyzer
-                sentiment = analyze_text(raw.title, raw.description)
+        print(f"[Synthesizer] Synthesized {count_for_tag} raw articles for tag '{tag}'")
 
-                # 2. Run through multi-tag assigner
-                tags = assign_tags(raw.api_category, raw.title, raw.description)
-                # Ensure primary tag is always included
-                if tag not in tags:
-                    tags.append(tag)
-                    tags = sorted(list(set(tags)))
+    print(f"[Synthesizer] Generated total of {len(raw_articles)} raw un-analyzed articles matching NewsAPI.org format.")
+    return raw_articles
 
-                # 3. Insert into SQLite DB with floor-hour fetched_at
-                article_id = db.insert_article(raw, sentiment, tags, fetched_at=window_fetched_at)
-                if article_id:
-                    total_inserted += 1
-                    count_for_tag += 1
-
-        print(f"[Synthesizer] Generated & Analyzed {count_for_tag} unique articles for tag '{tag}'")
-
-    # 4. Generate hourly snapshots & run contagion detector
-    db.create_hourly_tag_snapshots()
-    detect_cross_domain_contagion()
-
-    print(f"[Synthesizer] Completed! Successfully inserted & processed {total_inserted} total unique articles into DB.")
-    return total_inserted
+def synthesize_and_process_dataset(records_per_tag: int = 100) -> int:
+    """Synthesizes raw articles and passes them through the standard news processing pipeline."""
+    from app.services.news_fetcher import process_raw_articles
+    
+    # 1. Generate pure raw articles (no sentiment scores)
+    raw_articles = generate_raw_synthesized_articles(records_per_tag)
+    
+    # 2. Compute floor-hour window for DB insertion
+    win_from, win_to = db.get_floor_hour_window()
+    dt_from = datetime.datetime.strptime(win_from, "%Y-%m-%d %H:%M:%S")
+    window_fetched_at = (dt_from + datetime.timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M:%S")
+    
+    # 3. Process through standard pipeline (sentiment_analyzer.py -> assign_tags -> db)
+    return process_raw_articles(raw_articles, fetched_at=window_fetched_at)
 
 if __name__ == "__main__":
-    synthesize_dataset(100)
+    synthesize_and_process_dataset(100)

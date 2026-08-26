@@ -232,36 +232,30 @@ def generate_mock_articles(category: str) -> List[RawArticle]:
         )
     return raw_list
 
-def fetch_and_process_news() -> int:
+def process_raw_articles(
+    raw_articles: List[RawArticle],
+    fetched_at: Optional[str] = None,
+) -> int:
     """
-    Main job pipeline:
-    1. Fetches news for categories from NewsAPI.org -> Currents -> Mock fallback
-    2. Computes VADER sentiment & ugly keywords
-    3. Assigns multi-tags per article
-    4. Inserts into SQLite database with URL dedup
-    5. Computes hourly tag snapshots
-    6. Triggers contagion detection
+    Core processing pipeline:
+    1. Analyzes sentiment using sentiment_analyzer.analyze_text()
+    2. Assigns multi-domain tags using assign_tags()
+    3. Stores articles into SQLite database via db.insert_article()
+    4. Computes hourly tag snapshots & triggers contagion detection
     """
     total_new_articles = 0
 
-    for category in NEWSAPI_CATEGORIES:
-        raw_articles = fetch_from_newsapi(category)
-        if not raw_articles:
-            raw_articles = fetch_from_currents(category)
-        if not raw_articles:
-            raw_articles = generate_mock_articles(category)
+    for raw in raw_articles:
+        # 1. Analyze sentiment via sentiment_analyzer.py
+        sentiment = analyze_text(raw.title, raw.description)
 
-        for raw in raw_articles:
-            # 1. Analyze sentiment
-            sentiment = analyze_text(raw.title, raw.description)
+        # 2. Assign domain tags
+        tags = assign_tags(raw.api_category, raw.title, raw.description)
 
-            # 2. Assign domain tags
-            tags = assign_tags(raw.api_category, raw.title, raw.description)
-
-            # 3. Store in DB
-            article_id = db.insert_article(raw, sentiment, tags)
-            if article_id:
-                total_new_articles += 1
+        # 3. Store in DB
+        article_id = db.insert_article(raw, sentiment, tags, fetched_at=fetched_at)
+        if article_id:
+            total_new_articles += 1
 
     # 4. Generate hourly snapshots
     db.create_hourly_tag_snapshots()
@@ -270,3 +264,21 @@ def fetch_and_process_news() -> int:
     detect_cross_domain_contagion()
 
     return total_new_articles
+
+def fetch_and_process_news() -> int:
+    """
+    Main job pipeline:
+    1. Fetches raw news for categories from NewsAPI.org -> Currents -> Mock fallback
+    2. Passes raw articles into process_raw_articles pipeline
+    """
+    all_raw: List[RawArticle] = []
+
+    for category in NEWSAPI_CATEGORIES:
+        raw_articles = fetch_from_newsapi(category)
+        if not raw_articles:
+            raw_articles = fetch_from_currents(category)
+        if not raw_articles:
+            raw_articles = generate_mock_articles(category)
+        all_raw.extend(raw_articles)
+
+    return process_raw_articles(all_raw)
