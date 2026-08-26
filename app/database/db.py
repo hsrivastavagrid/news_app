@@ -244,9 +244,10 @@ def get_trends(tags: Optional[List[str]] = None, hours: int = 24) -> List[TrendP
 def get_articles(
     tags: Optional[List[str]] = None,
     sentiment: Optional[str] = None,
+    hours: Optional[int] = None,
     limit: int = 50
 ) -> List[ArticleSchema]:
-    """Fetches articles matching multi-tag intersection and optional sentiment filter."""
+    """Fetches articles matching multi-tag intersection, optional sentiment filter, and optional hour window."""
     conn = get_db_connection()
     cursor = conn.cursor()
     tags_clean = [t.strip().lower() for t in tags if t.strip()] if tags else []
@@ -254,6 +255,8 @@ def get_articles(
     from_clause, params = build_intersection_query(tags_clean)
     
     where_clauses = []
+    if hours:
+        where_clauses.append(f"a.fetched_at >= datetime('now', '-{hours} hours')")
     if sentiment:
         where_clauses.append("a.sentiment_label = ?")
         params.append(sentiment.lower())

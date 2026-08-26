@@ -3,6 +3,7 @@ import base64
 import time
 import datetime
 from pathlib import Path
+from typing import Optional, List
 import streamlit as st
 import plotly.graph_objects as go
 from streamlit_autorefresh import st_autorefresh
@@ -28,6 +29,23 @@ try:
     st_autorefresh(interval=60000, limit=None, key="hourly_news_pulse_refresher")
 except ImportError:
     st.markdown('<meta http-equiv="refresh" content="60">', unsafe_allow_html=True)
+
+def format_datetime_str(dt_raw: Optional[str]) -> str:
+    """Formats raw ISO/timestamp string as dd/mm/yyyy 12-hour time (GMT +5:30)."""
+    if not dt_raw:
+        return ""
+    try:
+        dt_str = str(dt_raw).strip()
+        if dt_str.endswith("Z"):
+            dt_str = dt_str[:-1] + "+00:00"
+        dt = datetime.datetime.fromisoformat(dt_str)
+        ist_tz = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=datetime.timezone.utc)
+        dt_ist = dt.astimezone(ist_tz)
+        return dt_ist.strftime("%d/%m/%Y %I:%M:%S %p (GMT +5:30)")
+    except Exception:
+        return str(dt_raw)
 
 # Load background image to base64
 def get_base64_image(image_path: str) -> str:
@@ -554,7 +572,7 @@ with col_f1:
     )
 
 sent_param = sentiment_filter.lower() if sentiment_filter != "All" else None
-articles = db.get_articles(tags=selected_tags, sentiment=sent_param, limit=50)
+articles = db.get_articles(tags=selected_tags, sentiment=sent_param, hours=1, limit=50)
 
 st.markdown(f'<div style="font-size: 14px; color: #94A3B8; margin-bottom: 16px;">Showing {len(articles)} articles</div>', unsafe_allow_html=True)
 
@@ -562,7 +580,7 @@ if articles:
     for art in articles:
         label_color = mode_colors.get(art.sentiment_label, "#9CA3AF")
         tags_html = " ".join([f'<span class="badge-tag">{t.title()}</span>' for t in art.tags])
-        pub_time = art.published_at or art.fetched_at
+        pub_time = format_datetime_str(art.published_at or art.fetched_at)
         
         st.markdown(
             f"""
