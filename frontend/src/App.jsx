@@ -4,6 +4,7 @@ import { log } from "./logger.js";
 import Sidebar from "./components/Sidebar.jsx";
 import ArticleCard from "./components/ArticleCard.jsx";
 import StatsBar from "./components/StatsBar.jsx";
+import ChatBubble from "./components/ChatBubble.jsx";
 
 const ALL_SENTIMENTS = ["good", "bad", "ugly", "neutral"];
 
@@ -34,7 +35,6 @@ export default function App() {
   });
   const [dashboard, setDashboard] = useState(null);
   const [articles, setArticles] = useState([]);
-  const [alerts, setAlerts] = useState([]);
   const [agentNote, setAgentNote] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -55,16 +55,14 @@ export default function App() {
     setLoading(true);
     setError("");
     try {
-      const [tags, dash, arts, contagion] = await Promise.all([
+      const [tags, dash, arts] = await Promise.all([
         api.tags(),
         api.dashboard(nextFilters),
         api.articles(nextFilters),
-        api.contagion(),
       ]);
       setTagsMeta(tags);
       setDashboard(dash);
       setArticles(arts);
-      setAlerts(contagion);
     } catch (err) {
       log.error("load feed failed", err);
       setError(err.message || "Failed to load feed");
@@ -205,23 +203,28 @@ export default function App() {
             <p className="kicker">Personal edition</p>
             <h2>Stories matching your desk</h2>
           </div>
-          <button
-            type="button"
-            className="btn"
-            data-testid="refresh-filters"
-            onClick={() => loadFeed(queryFilters)}
-            disabled={loading}
-          >
-            Refresh filters
-          </button>
+          <div className="edition-actions">
+            <button
+              type="button"
+              className="btn"
+              data-testid="open-chat"
+              onClick={() => window.dispatchEvent(new Event("newspulse-open-chat"))}
+            >
+              Ask the desk
+            </button>
+            <button
+              type="button"
+              className="btn"
+              data-testid="refresh-filters"
+              onClick={() => loadFeed(queryFilters)}
+              disabled={loading}
+            >
+              Refresh filters
+            </button>
+          </div>
         </header>
 
         {error ? <div className="banner err" data-testid="error-banner">{error}</div> : null}
-        {alerts.map((a) => (
-          <div key={a.source_tag || a.id} className="banner warn">
-            {a.message}
-          </div>
-        ))}
 
         <StatsBar
           dashboard={dashboard}
@@ -242,6 +245,7 @@ export default function App() {
           </div>
         )}
       </main>
+      <ChatBubble filters={queryFilters} />
     </div>
   );
 }

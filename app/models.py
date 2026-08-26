@@ -100,3 +100,27 @@ class AgentFilterResponse(BaseModel):
     tag_mode: str = "union"
     explanation: str = ""
     persisted: bool = False
+
+class ChatTurn(BaseModel):
+    role: str
+    content: str
+
+class ChatRequest(BaseModel):
+    message: str
+    history: List[ChatTurn] = []
+    tags: List[str] = []
+    sentiments: List[str] = []
+    keywords: List[str] = []
+    tag_mode: str = "union"
+
+class ChatCitation(BaseModel):
+    id: int
+    title: str
+    source_name: str = ""
+    url: str = ""
+    sentiment_label: str = "neutral"
+    tags: List[str] = []
+
+class ChatResponse(BaseModel):
+    answer: str
+    citations: List[ChatCitation] = []
