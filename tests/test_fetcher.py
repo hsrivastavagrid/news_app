@@ -2,6 +2,7 @@ import pytest
 from app.models import RawArticle
 from app.urls import source_article_url
 from app.services.news_fetcher import (
+    generate_mock_articles,
     compute_url_hash,
     normalize_published_at,
     canonicalize_url,
@@ -62,5 +63,11 @@ def test_dedupe_fetch_batch_collapses_url_and_title():
 
 def test_title_fingerprint_strips_cycle():
     assert title_fingerprint("AI Chip Breakthrough (Cycle 12)") == title_fingerprint("AI Chip Breakthrough")
+
+def test_mock_articles_generation():
+    articles = generate_mock_articles("technology")
+    assert len(articles) > 0
+    assert articles[0].api_category == "technology"
+    assert "tech" in articles[0].url or "example" in articles[0].url
 
 

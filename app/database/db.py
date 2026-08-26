@@ -50,9 +50,6 @@ def init_db():
         conn.executescript(schema_sql)
         conn.commit()
         logger.info("database schema applied path=%s", DB_PATH)
-        purged = purge_non_live_articles(conn)
-        if purged:
-            logger.info("purged non-live articles count=%s", purged)
         conn.commit()
     except Exception:
         logger.exception("database init failed path=%s", DB_PATH)
@@ -587,6 +584,19 @@ def insert_contagion_event(
     try:
         cursor.execute(
             """
+            SELECT id FROM contagion_events
+            WHERE resolved = 0
+              AND source_tag = ?
+              AND detected_at >= datetime('now', '-6 hours')
+            LIMIT 1
+            """,
+            (source_tag,),
+        )
+        if cursor.fetchone():
+            logger.info("contagion skip duplicate source=%s", source_tag)
+            return
+        cursor.execute(
+            """
             INSERT INTO contagion_events (
                 source_tag, target_tag, severity, source_compound_delta,
                 target_compound_current, message
@@ -608,9 +618,15 @@ def get_active_contagion_alerts() -> List[ContagionEventSchema]:
             SELECT id, detected_at, source_tag, target_tag, severity,
                    source_compound_delta, target_compound_current, message, resolved
             FROM contagion_events
-            WHERE resolved = 0
-              AND detected_at >= datetime('now', '-12 hours')
-            ORDER BY detected_at DESC
+            WHERE id IN (
+                SELECT MAX(id)
+                FROM contagion_events
+                WHERE resolved = 0
+                  AND detected_at >= datetime('now', '-12 hours')
+                GROUP BY source_tag
+            )
+            ORDER BY source_compound_delta ASC, detected_at DESC
+            LIMIT 6
             """
         )
         rows = cursor.fetchall()

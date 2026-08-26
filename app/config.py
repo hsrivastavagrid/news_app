@@ -44,6 +44,18 @@ DOMAIN_TAGS = [
     "world",
 ]
 
+# Only emit contagion along historically related domains (not a full cartesian product).
+CONTAGION_NEIGHBORS = {
+    "politics": ("finance", "world"),
+    "finance": ("politics", "tech", "world"),
+    "tech": ("finance", "science"),
+    "health": ("science", "world"),
+    "sports": ("entertainment",),
+    "science": ("tech", "health", "world"),
+    "entertainment": ("sports",),
+    "world": ("politics", "finance", "health"),
+}
+
 # Tag display names and accents (No emojis)
 TAG_METADATA = {
     "politics": {"label": "Politics", "icon": "", "color": "#F59E0B"},
