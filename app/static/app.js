@@ -42,6 +42,17 @@ async function apiPost(endpoint) {
     }
 }
 
+function formatWindowLabel(fromIso, toIso) {
+    const parseUtc = (value) => new Date(String(value).replace(' ', 'T') + 'Z');
+    const opts = { hour: '2-digit', minute: '2-digit' };
+    const from = parseUtc(fromIso);
+    const to = parseUtc(toIso);
+    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+        return 'LAST HOUR';
+    }
+    return `${from.toLocaleTimeString([], opts)} – ${to.toLocaleTimeString([], opts)}`;
+}
+
 // Helper to construct query string
 function getTagsQueryParam() {
     if (state.selectedTags.length === 0) return '';
@@ -213,7 +224,13 @@ function renderDashboardView() {
     document.getElementById('overall-mode-emoji').textContent = modeInfo.emoji;
     document.getElementById('overall-mode-title').textContent = modeInfo.label;
     document.getElementById('overall-mode-title').style.color = modeInfo.color;
-    document.getElementById('overall-mode-desc').textContent = modeInfo.desc;
+    document.getElementById('overall-mode-sub').textContent = modeInfo.desc;
+    const heroTag = document.getElementById('hero-window-tag');
+    if (heroTag) {
+        heroTag.textContent = data.window_from && data.window_to
+            ? `BROADER VIEW • ${formatWindowLabel(data.window_from, data.window_to)}`
+            : 'BROADER VIEW • LAST HOUR';
+    }
     document.getElementById('overall-compound-score').textContent = data.avg_compound > 0 ? `+${data.avg_compound}` : data.avg_compound;
     document.getElementById('overall-total-count').textContent = data.total_articles;
 

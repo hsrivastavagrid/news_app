@@ -59,6 +59,8 @@ class DashboardModeSchema(BaseModel):
     ugly_count: int
     neutral_count: int
     avg_compound: float
+    window_from: Optional[str] = None
+    window_to: Optional[str] = None
 
 class TrendPointSchema(BaseModel):
     snapshot_time: str
@@ -79,3 +81,22 @@ class ContagionEventSchema(BaseModel):
     target_compound_current: float
     message: str
     resolved: bool
+
+class PreferenceSchema(BaseModel):
+    tags: List[str] = []
+    sentiments: List[str] = ["good", "bad", "ugly", "neutral"]
+    keywords: List[str] = []
+    tag_mode: str = "union"
+    updated_at: Optional[str] = None
+
+class AgentFilterRequest(BaseModel):
+    message: str
+    persist: bool = True
+
+class AgentFilterResponse(BaseModel):
+    tags: List[str] = []
+    sentiments: List[str] = []
+    keywords: List[str] = []
+    tag_mode: str = "union"
+    explanation: str = ""
+    persisted: bool = False

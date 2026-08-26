@@ -15,7 +15,14 @@ __pycache__/
 *.db
 data/*.db
 
+# Logs
+logs/
+
 # IDE & OS files
 .DS_Store
 .vscode/
 .idea/
+
+# Frontend
+frontend/node_modules/
+frontend/dist/

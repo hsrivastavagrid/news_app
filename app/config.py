@@ -9,17 +9,27 @@ load_dotenv(BASE_DIR / ".env")
 # API Keys
 NEWSAPI_KEY = os.getenv("NEWSAPI_KEY", "")
 CURRENTS_API_KEY = os.getenv("CURRENTS_API_KEY", "")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROQ_BASE_URL = os.getenv("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
+# This Groq account does not serve llama-3.1-8b-instant. qwen/qwen3.8-27b is
+# available and has a 1000 req window (allam-2-7b has 7000 if you need volume).
+GROQ_MODEL = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
 
 # Server Settings
 PORT = int(os.getenv("PORT", 8000))
 HOST = os.getenv("HOST", "0.0.0.0")
 FETCH_INTERVAL_MINUTES = int(os.getenv("FETCH_INTERVAL_MINUTES", 60))
+FETCH_ON_START = os.getenv("FETCH_ON_START", "true").lower() in ("1", "true", "yes")
+SCHEDULER_ENABLED = os.getenv("SCHEDULER_ENABLED", "true").lower() in ("1", "true", "yes")
+LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
+LOG_FILE = os.getenv("LOG_FILE", str(BASE_DIR / "logs" / "newspulse.log"))
 
 # Database
 DB_PATH = BASE_DIR / "data" / "news_pulse.db"
 
 # API Endpoints
 NEWSAPI_BASE_URL = "https://newsapi.org/v2/top-headlines"
+NEWSAPI_EVERYTHING_URL = "https://newsapi.org/v2/everything"
 CURRENTS_BASE_URL = "https://api.currentsapi.services/v1/latest-news"
 
 # All supported domain tags
