@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NewsPulse — Real-Time News Sentiment Analysis</title>
+    <meta name="description" content="Hourly global news sentiment analyzer classifying news into Good, Bad, Ugly, and Neutral modes with multi-tag intersection filtering and cross-domain contagion detection.">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Top Navigation Header -->
+        <header class="main-header glass-card">
+            <div class="header-left">
+                <div class="logo-badge">
+                    <span class="logo-icon">🌐</span>
+                </div>
+                <div>
+                    <h1 class="logo-title">NewsPulse</h1>
+                    <p class="logo-subtitle">Cross-Domain Sentiment Intelligence</p>
+                </div>
+            </div>
+            <div class="header-right">
+                <div class="live-indicator">
+                    <span class="pulse-dot"></span>
+                    <span id="last-updated-time">Updated just now</span>
+                </div>
+                <button id="fetch-now-btn" class="btn btn-primary">
+                    <span class="btn-icon">⚡</span>
+                    <span class="btn-text">Fetch Now</span>
+                </button>
+            </div>
+        </header>
+
+        <!-- Contagion Alert Banner Container -->
+        <div id="contagion-banner-container" class="contagion-container hidden">
+            <!-- Dynamic Contagion Alerts Inserted Here -->
+        </div>
+
+        <!-- Hero Section: Broader View (Overall Mood) -->
+        <section class="hero-section glass-card">
+            <div class="hero-grid">
+                <div class="hero-left">
+                    <div class="hero-tag">BROADER VIEW (ALL NEWS)</div>
+                    <div class="hero-mode-container">
+                        <span id="overall-mode-emoji" class="hero-mode-emoji">😐</span>
+                        <div>
+                            <h2 id="overall-mode-title" class="hero-mode-title">NEUTRAL</h2>
+                            <p id="overall-mode-sub" class="hero-mode-desc">Global news sentiment is balanced across sectors</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="hero-right">
+                    <div class="metric-box">
+                        <span class="metric-label">Compound Score</span>
+                        <span id="overall-compound-score" class="metric-value">0.00</span>
+                    </div>
+                    <div class="metric-box">
+                        <span class="metric-label">Total Articles</span>
+                        <span id="overall-total-count" class="metric-value">0</span>
+                    </div>
+                    <div class="metric-box">
+                        <span class="metric-label">Ugly Index</span>
+                        <span id="overall-ugly-index" class="metric-value ugly-text">0%</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Domain Tag Selection Bar -->
+        <section class="tag-bar-section glass-card">
+            <div class="tag-bar-header">
+                <h3>🏷️ DOMAIN TAGS <span class="header-hint">(Click to multi-select for Intersection Subset)</span></h3>
+                <span id="tag-bar-status" class="tag-bar-status">Showing All Articles</span>
+            </div>
+            
+            <div id="tags-grid" class="tags-grid">
+                <!-- Tag Pills Dynamically Rendered -->
+            </div>
+
+            <!-- Active Selection Bar -->
+            <div id="active-tags-bar" class="active-tags-bar hidden">
+                <span class="active-label">Active Filter (Intersection):</span>
+                <div id="selected-pills-container" class="selected-pills-container">
+                    <!-- Selected Tag Chips -->
+                </div>
+                <button id="clear-tags-btn" class="btn btn-sm btn-ghost">Clear All ✕</button>
+            </div>
+        </section>
+
+        <!-- Dynamic Filtered View Panel -->
+        <section class="analysis-section">
+            <div class="section-title-bar">
+                <h3 id="panel-view-title">Overall Sentiment Breakdown</h3>
+                <span id="intersection-badge" class="badge badge-info hidden">INTERSECTION SUBSET</span>
+            </div>
+
+            <!-- 4 Sentiment Mode Cards Grid -->
+            <div class="mode-cards-grid">
+                <div class="mode-card mode-good glass-card">
+                    <div class="mode-card-header">
+                        <span class="mode-icon">😊</span>
+                        <span class="mode-name">GOOD</span>
+                    </div>
+                    <div class="mode-card-body">
+                        <span id="count-good" class="mode-count">0</span>
+                        <span id="pct-good" class="mode-pct">0%</span>
+                    </div>
+                    <div class="mode-card-bar">
+                        <div id="bar-good" class="mode-progress good-bg" style="width: 0%;"></div>
+                    </div>
+                </div>
+
+                <div class="mode-card mode-bad glass-card">
+                    <div class="mode-card-header">
+                        <span class="mode-icon">😞</span>
+                        <span class="mode-name">BAD</span>
+                    </div>
+                    <div class="mode-card-body">
+                        <span id="count-bad" class="mode-count">0</span>
+                        <span id="pct-bad" class="mode-pct">0%</span>
+                    </div>
+                    <div class="mode-card-bar">
+                        <div id="bar-bad" class="mode-progress bad-bg" style="width: 0%;"></div>
+                    </div>
+                </div>
+
+                <div class="mode-card mode-ugly glass-card">
+                    <div class="mode-card-header">
+                        <span class="mode-icon">💀</span>
+                        <span class="mode-name">UGLY</span>
+                    </div>
+                    <div class="mode-card-body">
+                        <span id="count-ugly" class="mode-count">0</span>
+                        <span id="pct-ugly" class="mode-pct">0%</span>
+                    </div>
+                    <div class="mode-card-bar">
+                        <div id="bar-ugly" class="mode-progress ugly-bg" style="width: 0%;"></div>
+                    </div>
+                </div>
+
+                <div class="mode-card mode-neutral glass-card">
+                    <div class="mode-card-header">
+                        <span class="mode-icon">😐</span>
+                        <span class="mode-name">NEUTRAL</span>
+                    </div>
+                    <div class="mode-card-body">
+                        <span id="count-neutral" class="mode-count">0</span>
+                        <span id="pct-neutral" class="mode-pct">0%</span>
+                    </div>
+                    <div class="mode-card-bar">
+                        <div id="bar-neutral" class="mode-progress neutral-bg" style="width: 0%;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts Section (Donut + 24h Trend) -->
+            <div class="charts-grid">
+                <div class="chart-card glass-card">
+                    <h4>Sentiment Distribution</h4>
+                    <div class="chart-container">
+                        <canvas id="donutChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-card glass-card">
+                    <h4>24-Hour Sentiment Velocity Trend</h4>
+                    <div class="chart-container">
+                        <canvas id="trendChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Article Feed Section -->
+            <div class="article-feed-card glass-card">
+                <div class="feed-header">
+                    <div class="feed-title-container">
+                        <h4>📰 Live News Feed</h4>
+                        <span id="article-count-badge" class="badge">0 Articles</span>
+                    </div>
+                    <!-- Sentiment Filter Tabs -->
+                    <div class="sentiment-tabs">
+                        <button class="tab-btn active" data-sentiment="all">All</button>
+                        <button class="tab-btn" data-sentiment="good">😊 Good</button>
+                        <button class="tab-btn" data-sentiment="bad">😞 Bad</button>
+                        <button class="tab-btn" data-sentiment="ugly">💀 Ugly</button>
+                        <button class="tab-btn" data-sentiment="neutral">😐 Neutral</button>
+                    </div>
+                </div>
+
+                <!-- Article List Container -->
+                <div id="article-feed-list" class="article-feed-list">
+                    <!-- Dynamic Article Cards -->
+                </div>
+            </div>
+        </section>
+
+        <!-- Footer -->
+        <footer class="main-footer">
+            <p>NewsPulse Real-Time Sentiment Dashboard • Powered by VADER NLP & Free News APIs</p>
+        </footer>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
