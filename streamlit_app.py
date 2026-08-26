@@ -361,9 +361,8 @@ if alerts:
     for alert in alerts:
         st.markdown(f'<div class="alert-banner">{alert.message}</div>', unsafe_allow_html=True)
 
-# Compute the most recent COMPLETE floor-hour window (UTC)
-# e.g. now=14:55 UTC → win_from='13:00', win_to='14:00'
-win_from, win_to = db.get_floor_hour_window()
+# Fetch rolling 1-hour window (now - 1h -> now) from backend source of truth
+win_from, win_to = db.get_rolling_window()
 
 # For display in UI: convert window bounds to IST (GMT+5:30)
 _ist = datetime.timezone(datetime.timedelta(hours=5, minutes=30))

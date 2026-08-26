@@ -308,7 +308,7 @@ def generate_raw_synthesized_articles(records_per_tag: int = 100) -> List[RawArt
     All raw articles produced here are fed directly into the standard processing pipeline,
     where sentiment_analyzer.py evaluates scores and labels identically to live API data.
     """
-    win_from, win_to = db.get_floor_hour_window()
+    win_from, win_to = db.get_rolling_window()
     dt_from = datetime.datetime.strptime(win_from, "%Y-%m-%d %H:%M:%S")
 
     raw_articles: List[RawArticle] = []
@@ -346,7 +346,7 @@ def generate_raw_synthesized_articles(records_per_tag: int = 100) -> List[RawArt
                 article_index += 1
                 unique_url = f"https://newsapi.org/v2/articles/synth-{tag}-{article_index}-{hashlib.md5(title.encode()).hexdigest()[:8]}"
                 source_name = random.choice(NEWS_SOURCES)
-                published_at = (dt_from + datetime.timedelta(minutes=random.randint(5, 55))).strftime("%Y-%m-%dT%H:%M:%SZ")
+                published_at = (dt_from + datetime.timedelta(minutes=random.randint(2, 58))).strftime("%Y-%m-%d %H:%M:%S")
 
                 # Construct standard RawArticle dataclass (matching NewsAPI.org response schema)
                 raw_articles.append(
@@ -375,8 +375,8 @@ def synthesize_and_process_dataset(records_per_tag: int = 100) -> int:
     # 1. Generate pure raw articles (no sentiment scores)
     raw_articles = generate_raw_synthesized_articles(records_per_tag)
     
-    # 2. Compute floor-hour window for DB insertion
-    win_from, win_to = db.get_floor_hour_window()
+    # 2. Compute rolling 1-hour window for DB insertion
+    win_from, win_to = db.get_rolling_window()
     dt_from = datetime.datetime.strptime(win_from, "%Y-%m-%d %H:%M:%S")
     window_fetched_at = (dt_from + datetime.timedelta(minutes=30)).strftime("%Y-%m-%d %H:%M:%S")
     

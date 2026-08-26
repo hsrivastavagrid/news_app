@@ -12,20 +12,21 @@ from app.models import (
     ContagionEventSchema,
 )
 
-def get_floor_hour_window() -> Tuple[str, str]:
+def get_rolling_window() -> Tuple[str, str]:
     """
-    Returns (window_start, window_end) ISO strings for the most recent COMPLETE hour.
-    Example: if now = 14:55 UTC → window_start = '14:00:00', window_end = '15:00:00' (i.e., 13:00-14:00)
-    Wait — the user wants: app launched at 2:55 PM → show 1:00 PM to 2:00 PM.
-    So: floor_hour = 14:00, window = 13:00 → 14:00 (floor_hour - 1h → floor_hour).
+    Returns (start, end) UTC ISO strings for a rolling 1-hour window ending NOW.
+    Example: if now = 15:44:00 UTC → start = 14:44:00, end = 15:44:00.
     """
     now_utc = datetime.datetime.now(datetime.timezone.utc)
-    floor_hour = now_utc.replace(minute=0, second=0, microsecond=0)
-    window_start = floor_hour - datetime.timedelta(hours=1)
+    start = now_utc - datetime.timedelta(hours=1)
     return (
-        window_start.strftime("%Y-%m-%d %H:%M:%S"),
-        floor_hour.strftime("%Y-%m-%d %H:%M:%S"),
+        start.strftime("%Y-%m-%d %H:%M:%S"),
+        now_utc.strftime("%Y-%m-%d %H:%M:%S"),
     )
+
+def get_floor_hour_window() -> Tuple[str, str]:
+    """Alias for backwards compatibility."""
+    return get_rolling_window()
 
 def get_db_connection() -> sqlite3.Connection:
     conn = sqlite3.connect(DB_PATH, check_same_thread=False)
@@ -120,14 +121,14 @@ def get_all_tags_with_metadata(
     """
     Returns each domain tag with its article count and dominant sentiment mode.
     time_from / time_to are ISO datetime strings (UTC). If both provided, filters
-    articles to that exact window (e.g., floor-hour window: 13:00 -> 14:00).
+    articles to that exact rolling window (start <= published_at <= end).
     """
     conn = get_db_connection()
     cursor = conn.cursor()
     results = []
 
     if time_from and time_to:
-        time_filter = "WHERE at.tag = ? AND a.fetched_at >= ? AND a.fetched_at < ?"
+        time_filter = "WHERE at.tag = ? AND datetime(a.published_at) >= datetime(?) AND datetime(a.published_at) <= datetime(?)"
         time_params_extra = [time_from, time_to]
     else:
         time_filter = "WHERE at.tag = ?"
@@ -194,8 +195,8 @@ def get_dashboard_mode(
     time_to: Optional[str] = None,
 ) -> DashboardModeSchema:
     """
-    Calculates overall sentiment mode for selected tag intersection within a time window.
-    time_from / time_to are ISO datetime strings (UTC). Filters articles fetched_at >= time_from and < time_to.
+    Calculates overall sentiment mode for selected tag intersection within a rolling time window.
+    time_from / time_to are ISO datetime strings (UTC). Filters articles published_at between time_from and time_to.
     """
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -203,7 +204,7 @@ def get_dashboard_mode(
 
     from_clause, params = build_intersection_query(tags_clean)
     if time_from and time_to:
-        where_clause = "WHERE a.fetched_at >= ? AND a.fetched_at < ?"
+        where_clause = "WHERE datetime(a.published_at) >= datetime(?) AND datetime(a.published_at) <= datetime(?)"
         params = params + [time_from, time_to]
     else:
         where_clause = ""
@@ -256,7 +257,7 @@ def get_trends(tags: Optional[List[str]] = None, hours: int = 24) -> List[TrendP
     
     sql = f"""
         SELECT 
-            strftime('%Y-%m-%d %H:00:00', a.fetched_at) as hour_slot,
+            strftime('%Y-%m-%d %H:00:00', a.published_at) as hour_slot,
             COUNT(*) as total,
             SUM(CASE WHEN a.sentiment_label = 'good' THEN 1 ELSE 0 END) as good_count,
             SUM(CASE WHEN a.sentiment_label = 'bad' THEN 1 ELSE 0 END) as bad_count,
@@ -264,7 +265,7 @@ def get_trends(tags: Optional[List[str]] = None, hours: int = 24) -> List[TrendP
             SUM(CASE WHEN a.sentiment_label = 'neutral' THEN 1 ELSE 0 END) as neutral_count,
             AVG(a.compound_score) as avg_compound
         {from_clause}
-        WHERE a.fetched_at >= datetime('now', '-{hours} hours')
+        WHERE datetime(a.published_at) >= datetime('now', '-{hours} hours')
         GROUP BY hour_slot
         ORDER BY hour_slot ASC
     """
@@ -297,8 +298,8 @@ def get_articles(
     limit: int = 50
 ) -> List[ArticleSchema]:
     """
-    Fetches articles matching multi-tag intersection, optional sentiment filter, and floor-hour time window.
-    time_from / time_to are ISO datetime strings (UTC) bounding the window (e.g., '2026-08-26 13:00:00' → '2026-08-26 14:00:00').
+    Fetches articles matching multi-tag intersection, optional sentiment filter, and rolling time window.
+    time_from / time_to are ISO datetime strings (UTC) bounding the window (start <= published_at <= end).
     """
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -308,7 +309,7 @@ def get_articles(
 
     where_clauses = []
     if time_from and time_to:
-        where_clauses.append("a.fetched_at >= ? AND a.fetched_at < ?")
+        where_clauses.append("datetime(a.published_at) >= datetime(?) AND datetime(a.published_at) <= datetime(?)")
         params = params + [time_from, time_to]
     if sentiment:
         where_clauses.append("a.sentiment_label = ?")
@@ -324,7 +325,7 @@ def get_articles(
             a.sentiment_label
         {from_clause}
         {where_str}
-        ORDER BY a.fetched_at DESC
+        ORDER BY datetime(a.published_at) DESC
         LIMIT ?
     """
     params.append(limit)
