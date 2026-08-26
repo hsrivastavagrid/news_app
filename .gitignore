@@ -1,0 +1,21 @@
+# Environment variables (Do NOT commit secret keys)
+.env
+
+# Virtual environments
+.venv/
+env/
+venv/
+
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# SQLite databases
+*.db
+data/*.db
+
+# IDE & OS files
+.DS_Store
+.vscode/
+.idea/
